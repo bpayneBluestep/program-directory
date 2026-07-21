@@ -1,31 +1,13 @@
-import { NavLink, Route, Routes } from 'react-router-dom'
-import Home from './routes/Home'
-import Status from './routes/Status'
-
 export default function App() {
   return (
-    <div className="shell">
-      <header className="topbar">
-        <span className="brand">GitSite SPA Starter</span>
-        <nav>
-          <NavLink to="/" end>
-            Home
-          </NavLink>
-          <NavLink to="/status">Status</NavLink>
-        </nav>
-      </header>
-
-      <main>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/status" element={<Status />} />
-          <Route path="*" element={<Home />} />
-        </Routes>
+    <div className="coming-soon">
+      <main className="cs-inner">
+        <p className="cs-eyebrow">Program Directory</p>
+        <h1 className="cs-title">Coming soon</h1>
+        <p className="cs-sub">
+          We&rsquo;re putting the finishing touches on something new. Check back shortly.
+        </p>
       </main>
-
-      <footer className="footer">
-        Served under <code>/spa/</code> from a GitHub-backed BlueStep GitSite.
-      </footer>
     </div>
   )
 }

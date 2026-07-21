@@ -20,86 +20,40 @@ body {
   line-height: 1.55;
 }
 
-.shell {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 3rem;
+.coming-soon {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.25rem;
+  background:
+    radial-gradient(1100px 500px at 50% -10%, rgba(74, 163, 255, 0.18), transparent 60%),
+    var(--bg);
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border);
+.cs-inner {
+  max-width: 560px;
+  text-align: center;
 }
 
-.brand {
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-
-.topbar nav {
-  display: flex;
-  gap: 1rem;
-}
-
-.topbar a {
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 0.95rem;
-}
-
-.topbar a.active {
+.cs-eyebrow {
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--accent);
 }
 
-.card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-top: 1.5rem;
+.cs-title {
+  margin: 0 0 1rem;
+  font-size: clamp(2.25rem, 6vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
-h1 {
-  margin-top: 0;
-}
-
-a {
-  color: var(--accent);
-}
-
-code {
-  background: rgba(255, 255, 255, 0.06);
-  padding: 0.1em 0.35em;
-  border-radius: 5px;
-  font-size: 0.9em;
-}
-
-table.status {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-}
-
-table.status th,
-table.status td {
-  text-align: left;
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
-
-table.status th {
+.cs-sub {
+  margin: 0;
   color: var(--muted);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.footer {
-  margin-top: 2rem;
-  color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 1.05rem;
 }
