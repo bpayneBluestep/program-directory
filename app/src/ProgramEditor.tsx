@@ -1,18 +1,29 @@
 /* =====================================================================
-   ProgramEditor.tsx — the profile editor for one program. Loads the full
-   record, tracks working state + dirtiness against the last-saved baseline,
-   and saves the five editable fields as a partial. The logo saves on its
-   own (see LogoUpload). A live ListingPreview mirrors the working state.
+   ProgramEditor.tsx — the full profile editor for one program.
+
+   Schema-driven: the field catalog, section order, and option lists come
+   from the endpoint (getMeta), so the form renders every program-editable
+   field without hardcoding the 50-field schema here. Each field renders the
+   right control for its type (text / memo / number / boolean / single- /
+   multi-select), plus the structured Contacts editor and the Logo uploader.
+
+   Working state is tracked against a last-saved baseline; Save sends only the
+   changed fields as a partial. A live ListingPreview mirrors the headline
+   fields. The logo saves on its own (see LogoUpload).
    ===================================================================== */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  apiGetMeta,
   apiGetProgram,
   apiSaveProgram,
   LoggedOutError,
   parseContacts,
   serializeContacts,
   type Contact,
+  type EditableFields,
+  type FieldMeta,
+  type PortalMeta,
   type Program,
 } from './api';
 import ContactsEditor from './ContactsEditor';
@@ -27,37 +38,56 @@ interface Props {
   onLoggedOut: () => void;
 }
 
-// The working, editable slice of a program (everything the form touches).
+// The working, editable slice: every catalog field's value (keyed by catalog
+// key) plus the structured contacts list (contactsJson is derived on save).
 interface Draft {
-  programName: string;
-  website: string;
-  overview: string;
-  admissionsContact: string;
+  values: Record<string, unknown>;
   contacts: Contact[];
 }
 
-function draftFromProgram(p: Program): Draft {
-  return {
-    programName: p.programName || '',
-    website: p.website || '',
-    overview: p.overview || '',
-    admissionsContact: p.admissionsContact || '',
-    contacts: parseContacts(p),
-  };
+const LOGO_SECTION = 'Logo';
+
+function anchorId(section: string): string {
+  return 'sec-' + section.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
-// Compare current draft to the baseline to drive the Save button + guard.
-function isDirty(a: Draft, b: Draft): boolean {
-  return (
-    a.programName !== b.programName ||
-    a.website !== b.website ||
-    a.overview !== b.overview ||
-    a.admissionsContact !== b.admissionsContact ||
-    serializeContacts(a.contacts) !== serializeContacts(b.contacts)
-  );
+// Build the working draft from a loaded program per the schema. Values are
+// normalized to what each control edits: multi → string[], boolean → bool,
+// everything else → string (number kept as its string form for the input).
+function buildDraft(p: Program, meta: PortalMeta): Draft {
+  const values: Record<string, unknown> = {};
+  for (const f of meta.fields) {
+    if (f.widget === 'contacts') continue;
+    const v = p[f.key];
+    if (f.type === 'multi') values[f.key] = Array.isArray(v) ? [...(v as string[])] : [];
+    else if (f.type === 'boolean') values[f.key] = v === true;
+    else if (f.type === 'number') values[f.key] = v === null || v === undefined ? '' : String(v);
+    else values[f.key] = v == null ? '' : String(v);
+  }
+  return { values, contacts: parseContacts(p) };
+}
+
+// The changed keys, in the shape the endpoint's write engine expects. Number
+// fields send an actual number (or '' to clear); contacts serialize to JSON.
+function changedFields(draft: Draft, base: Draft, meta: PortalMeta): EditableFields {
+  const out: EditableFields = {};
+  for (const f of meta.fields) {
+    if (f.widget === 'contacts') continue;
+    const a = draft.values[f.key];
+    const b = base.values[f.key];
+    if (JSON.stringify(a) === JSON.stringify(b)) continue;
+    if (f.type === 'number') out[f.key] = a === '' ? '' : Number(a);
+    else if (f.type === 'multi') out[f.key] = (a as string[]) || [];
+    else if (f.type === 'boolean') out[f.key] = a === true;
+    else out[f.key] = (a as string) ?? '';
+  }
+  const cj = serializeContacts(draft.contacts);
+  if (cj !== serializeContacts(base.contacts)) out.contactsJson = cj;
+  return out;
 }
 
 export default function ProgramEditor({ programId, canSwitch, onSwitch, onLoggedOut }: Props) {
+  const [meta, setMeta] = useState<PortalMeta | null>(null);
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -72,8 +102,10 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
     setLoading(true);
     setLoadError(null);
     try {
-      const p = await apiGetProgram(programId);
-      const d = draftFromProgram(p);
+      // Meta + record in parallel; meta rarely changes but is cheap to refetch.
+      const [m, p] = await Promise.all([apiGetMeta(), apiGetProgram(programId)]);
+      const d = buildDraft(p, m);
+      setMeta(m);
       setProgram(p);
       setDraft(d);
       setBaseline(d);
@@ -93,7 +125,11 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
     load();
   }, [load]);
 
-  const dirty = useMemo(() => (draft && baseline ? isDirty(draft, baseline) : false), [draft, baseline]);
+  const pending = useMemo(
+    () => (draft && baseline && meta ? changedFields(draft, baseline, meta) : {}),
+    [draft, baseline, meta],
+  );
+  const dirty = Object.keys(pending).length > 0;
 
   // Warn on tab close / reload while there are unsaved edits.
   useEffect(() => {
@@ -106,23 +142,19 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
 
-  function set<K extends keyof Draft>(key: K, value: Draft[K]) {
-    setDraft((d) => (d ? { ...d, [key]: value } : d));
-  }
+  const setValue = useCallback((key: string, value: unknown) => {
+    setDraft((d) => (d ? { ...d, values: { ...d.values, [key]: value } } : d));
+  }, []);
+  const setContacts = useCallback((next: Contact[]) => {
+    setDraft((d) => (d ? { ...d, contacts: next } : d));
+  }, []);
 
   async function handleSave() {
-    if (!draft || saving || !dirty) return;
+    if (!draft || !meta || saving || !dirty) return;
     setSaving(true);
     try {
-      const result = await apiSaveProgram(programId, {
-        programName: draft.programName.trim(),
-        website: draft.website.trim(),
-        overview: draft.overview,
-        admissionsContact: draft.admissionsContact.trim(),
-        contactsJson: serializeContacts(draft.contacts),
-      });
-      // Re-baseline from the server's authoritative copy.
-      const saved = draftFromProgram(result);
+      const result = await apiSaveProgram(programId, pending);
+      const saved = buildDraft(result, meta);
       setProgram(result);
       setDraft(saved);
       setBaseline(saved);
@@ -157,7 +189,7 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
     );
   }
 
-  if (loadError || !draft || !program) {
+  if (loadError || !draft || !program || !meta) {
     return (
       <div className="state-center">
         <div className="state-card">
@@ -174,6 +206,9 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
     );
   }
 
+  const programName = String(draft.values.programName || '');
+  const navSections = [...meta.sections, LOGO_SECTION];
+
   return (
     <div className="editor">
       {/* Program title row */}
@@ -183,12 +218,12 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
             {logoUrl ? (
               <img src={logoUrl} alt="" />
             ) : (
-              <span aria-hidden="true">{(draft.programName || 'P').trim().charAt(0).toUpperCase()}</span>
+              <span aria-hidden="true">{(programName || 'P').trim().charAt(0).toUpperCase()}</span>
             )}
           </div>
           <div>
             <p className="editor-eyebrow">Editing your listing</p>
-            <h1 className="editor-title">{draft.programName.trim() || program.programName || 'Untitled program'}</h1>
+            <h1 className="editor-title">{programName.trim() || program.programName || 'Untitled program'}</h1>
             <div className="editor-meta">
               <StatusBadge status={program.portalStatus} />
               {program.shortId ? <span className="editor-id">ID {program.shortId}</span> : null}
@@ -203,88 +238,48 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
         ) : null}
       </header>
 
+      {/* Section jump nav */}
+      <nav className="editor-nav" aria-label="Profile sections">
+        {navSections.map((s) => (
+          <a key={s} className="editor-nav-chip" href={`#${anchorId(s)}`}>
+            {s}
+          </a>
+        ))}
+      </nav>
+
       <div className="editor-body">
-        {/* Left: the form */}
+        {/* Left: the form, one card per section */}
         <div className="editor-form">
-          <section className="card">
-            <div className="card-head">
-              <h2 className="card-title">Basics</h2>
-              <p className="card-sub">The name, site, and who handles admissions.</p>
-            </div>
-            <div className="card-body">
-              <label className="field">
-                <span className="field-label">Program name</span>
-                <input
-                  className="input"
-                  type="text"
-                  value={draft.programName}
-                  onChange={(e) => set('programName', e.target.value)}
-                  disabled={saving}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Website</span>
-                <input
-                  className="input"
-                  type="url"
-                  inputMode="url"
-                  placeholder="https://yourprogram.org"
-                  value={draft.website}
-                  onChange={(e) => set('website', e.target.value)}
-                  disabled={saving}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Admissions contact</span>
-                <input
-                  className="input"
-                  type="text"
-                  placeholder="Name, phone, or email for admissions inquiries"
-                  value={draft.admissionsContact}
-                  onChange={(e) => set('admissionsContact', e.target.value)}
-                  disabled={saving}
-                />
-                <span className="field-help">A quick line families can act on — the rest goes under Contacts.</span>
-              </label>
-            </div>
-          </section>
+          {meta.sections.map((section) => {
+            const fields = meta.fields.filter((f) => f.section === section);
+            if (!fields.length) return null;
+            return (
+              <section className="card" id={anchorId(section)} key={section}>
+                <div className="card-head">
+                  <h2 className="card-title">{section}</h2>
+                </div>
+                <div className="card-body">
+                  <div className="field-grid">
+                    {fields.map((f) => (
+                      <FieldControl
+                        key={f.key}
+                        field={f}
+                        value={draft.values[f.key]}
+                        options={meta.options[f.key] || []}
+                        contacts={draft.contacts}
+                        disabled={saving}
+                        onChange={(v) => setValue(f.key, v)}
+                        onContactsChange={setContacts}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </section>
+            );
+          })}
 
-          <section className="card">
-            <div className="card-head">
-              <h2 className="card-title">Overview</h2>
-              <p className="card-sub">The story families read first. Plain language, no jargon.</p>
-            </div>
-            <div className="card-body">
-              <label className="field">
-                <span className="sr-only">Overview</span>
-                <textarea
-                  className="input textarea"
-                  rows={7}
-                  placeholder="Who you serve, the care you provide, and what makes your program distinct."
-                  value={draft.overview}
-                  onChange={(e) => set('overview', e.target.value)}
-                  disabled={saving}
-                />
-                <span className="field-help">{draft.overview.trim().length} characters</span>
-              </label>
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="card-head">
-              <h2 className="card-title">Contacts</h2>
-              <p className="card-sub">The people a referring family or professional should reach.</p>
-            </div>
-            <div className="card-body">
-              <ContactsEditor
-                contacts={draft.contacts}
-                onChange={(next) => set('contacts', next)}
-                disabled={saving}
-              />
-            </div>
-          </section>
-
-          <section className="card">
+          {/* Logo — saves on upload, separate from the field changes above */}
+          <section className="card" id={anchorId(LOGO_SECTION)}>
             <div className="card-head">
               <h2 className="card-title">Logo</h2>
               <p className="card-sub">Saved on upload — separate from the changes below.</p>
@@ -293,7 +288,7 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
               <LogoUpload
                 programId={programId}
                 logoUrl={logoUrl}
-                programName={draft.programName}
+                programName={programName}
                 onLogoChange={setLogoUrl}
                 onLoggedOut={onLoggedOut}
               />
@@ -301,13 +296,13 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
           </section>
         </div>
 
-        {/* Right: live listing preview (signature) */}
+        {/* Right: live listing preview */}
         <aside className="editor-side">
           <ListingPreview
-            programName={draft.programName}
-            website={draft.website}
-            overview={draft.overview}
-            admissionsContact={draft.admissionsContact}
+            programName={programName}
+            website={String(draft.values.website || '')}
+            overview={String(draft.values.overview || '')}
+            admissionsContact={String(draft.values.admissionsContact || '')}
             contacts={draft.contacts}
             logoUrl={logoUrl}
             portalStatus={program.portalStatus}
@@ -318,7 +313,13 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
       {/* Sticky save bar */}
       <div className={`savebar${dirty ? ' savebar-active' : ''}`}>
         <span className="savebar-status" aria-live="polite">
-          {saving ? 'Saving…' : dirty ? 'You have unsaved changes' : 'All changes saved'}
+          {saving
+            ? 'Saving…'
+            : dirty
+              ? `You have unsaved changes${
+                  Object.keys(pending).length ? ` (${Object.keys(pending).length})` : ''
+                }`
+              : 'All changes saved'}
         </span>
         <div className="savebar-actions">
           <button className="btn btn-ghost" onClick={handleReset} disabled={!dirty || saving}>
@@ -330,5 +331,144 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
         </div>
       </div>
     </div>
+  );
+}
+
+/* ---- one field, rendered by type ---- */
+
+interface FieldControlProps {
+  field: FieldMeta;
+  value: unknown;
+  options: string[];
+  contacts: Contact[];
+  disabled: boolean;
+  onChange: (value: unknown) => void;
+  onContactsChange: (next: Contact[]) => void;
+}
+
+function FieldControl({ field, value, options, contacts, disabled, onChange, onContactsChange }: FieldControlProps) {
+  // Structured contacts editor.
+  if (field.widget === 'contacts') {
+    return (
+      <div className="field field-wide">
+        <span className="field-label">{field.label}</span>
+        <ContactsEditor contacts={contacts} onChange={onContactsChange} disabled={disabled} />
+      </div>
+    );
+  }
+
+  if (field.type === 'memo') {
+    const v = String(value ?? '');
+    return (
+      <label className="field field-wide">
+        <span className="field-label">{field.label}</span>
+        <textarea
+          className="input textarea"
+          rows={6}
+          value={v}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+        />
+        <span className="field-help">{v.trim().length} characters</span>
+      </label>
+    );
+  }
+
+  if (field.type === 'boolean') {
+    return (
+      <div className="field field-bool">
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={value === true}
+            onChange={(e) => onChange(e.target.checked)}
+            disabled={disabled}
+          />
+          <span className="switch-track" aria-hidden="true"><span className="switch-thumb" /></span>
+          <span className="field-label switch-label">{field.label}</span>
+        </label>
+      </div>
+    );
+  }
+
+  if (field.type === 'single') {
+    return (
+      <label className="field">
+        <span className="field-label">{field.label}</span>
+        <select className="input select" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+          <option value="">— Select —</option>
+          {options.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  if (field.type === 'multi') {
+    const selected: string[] = Array.isArray(value) ? (value as string[]) : [];
+    const toggle = (opt: string) => {
+      onChange(selected.includes(opt) ? selected.filter((x) => x !== opt) : [...selected, opt]);
+    };
+    return (
+      <div className="field field-wide">
+        <span className="field-label">
+          {field.label}
+          {selected.length ? <span className="field-count"> · {selected.length} selected</span> : null}
+        </span>
+        {options.length ? (
+          <div className="checkgroup">
+            {options.map((o) => (
+              <label key={o} className={`chip-check${selected.includes(o) ? ' is-on' : ''}`}>
+                <input type="checkbox" checked={selected.includes(o)} onChange={() => toggle(o)} disabled={disabled} />
+                <span>{o}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <span className="field-help">No options configured.</span>
+        )}
+      </div>
+    );
+  }
+
+  if (field.type === 'number') {
+    return (
+      <label className="field">
+        <span className="field-label">{field.label}</span>
+        <input
+          className="input"
+          type="number"
+          inputMode="numeric"
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+        />
+      </label>
+    );
+  }
+
+  if (field.type === 'date') {
+    return (
+      <label className="field">
+        <span className="field-label">{field.label}</span>
+        <input className="input" type="date" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} disabled={disabled} />
+      </label>
+    );
+  }
+
+  // text (default)
+  return (
+    <label className="field">
+      <span className="field-label">{field.label}</span>
+      <input
+        className="input"
+        type={field.key === 'website' ? 'url' : 'text'}
+        inputMode={field.key === 'website' ? 'url' : undefined}
+        value={String(value ?? '')}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      />
+    </label>
   );
 }

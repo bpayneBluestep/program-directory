@@ -40,6 +40,10 @@ export interface Contact {
   email?: string;
 }
 
+// A program record is now the full profile schema (getMeta defines the fields),
+// so values are heterogeneous: string | number | null | boolean | string[]. The
+// named members below are the few the SPA references directly (preview, logo,
+// contacts, status); everything else is reached generically by catalog key.
 export interface Program {
   id: string;
   shortId?: string;
@@ -51,15 +55,30 @@ export interface Program {
   contacts: Contact[] | null;
   portalStatus: string;
   logoUrl: string;
+  [key: string]: unknown;
 }
 
-// The five fields editable in v0 (all optional — saveProgram writes a partial).
-export interface EditableFields {
-  programName?: string;
-  website?: string;
-  overview?: string;
-  admissionsContact?: string;
-  contactsJson?: string;
+// A partial save — any subset of catalog keys, each in its typed shape
+// (string | number | boolean | string[]); contacts ride as a JSON string.
+export type FieldValue = string | number | boolean | string[] | null;
+export type EditableFields = Record<string, FieldValue>;
+
+/* ---- editor schema (from getMeta) ---- */
+
+export type FieldType = 'text' | 'memo' | 'single' | 'multi' | 'boolean' | 'number' | 'date';
+
+export interface FieldMeta {
+  key: string;
+  label: string;
+  type: FieldType;
+  section: string;
+  widget: string | null; // e.g. "contacts" — a special control
+}
+
+export interface PortalMeta {
+  sections: string[];                    // section order for the editor
+  fields: FieldMeta[];                   // catalog order
+  options: Record<string, string[]>;     // available options per single/multi key
 }
 
 export interface SaveResult extends Program {
@@ -139,6 +158,11 @@ export function apiPing(): Promise<any> {
 // Who's signed in. Drives the header chrome and the auth gate.
 export function apiSession(): Promise<Session> {
   return portalGet('session');
+}
+
+// The editor schema: sections, ordered fields, and option lists. Fetched once.
+export function apiGetMeta(): Promise<PortalMeta> {
+  return portalGet('getMeta');
 }
 
 // ONLY the caller's own programs (many-to-many; 0, 1, or several).
