@@ -97,13 +97,10 @@ export default function Landing() {
                   <p>
                     <strong>No match for &ldquo;{q.trim()}&rdquo;.</strong>
                   </p>
-                  <p className="muted">
-                    Try a shorter name. If your program isn&rsquo;t listed yet, email{' '}
-                    <a href="mailto:bpayne@bluestep.net?subject=Add%20our%20program%20to%20the%20directory">
-                      bpayne@bluestep.net
-                    </a>{' '}
-                    and we&rsquo;ll add it.
-                  </p>
+                  <p className="muted">Try a shorter name. If your program isn&rsquo;t listed yet, tell us about it and we&rsquo;ll add it.</p>
+                  <Link className="btn btn-primary btn-sm results-add" to={`/add?name=${encodeURIComponent(q.trim())}`}>
+                    <Icon name="plus" size={15} /> Add your program
+                  </Link>
                 </div>
               ) : (
                 <ul className="results-list">
@@ -141,7 +138,10 @@ export default function Landing() {
           <div className="how-step">
             <span className="how-num">1</span>
             <h3>Find your listing</h3>
-            <p>Most programs are already here, built from public information on your website.</p>
+            <p>
+              Most programs are already here, built from public information on your website. Not listed?{' '}
+              <Link to="/add">Add your program</Link>.
+            </p>
           </div>
           <div className="how-step">
             <span className="how-num">2</span>

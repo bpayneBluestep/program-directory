@@ -441,6 +441,44 @@ export function apiClaimVerify(token: string, code: string): Promise<ClaimResult
   return claimPost('verify', { token, code });
 }
 
+/* ---- new-listing requests (a program that isn't in the directory yet) ---- */
+
+export interface ListingMeta {
+  programType: string[];
+  levelOfCare: string[];
+  genderServed: string[];
+  specialties: string[];
+  locationState: string[];
+}
+
+export interface ListingRequest {
+  program: {
+    programName: string;
+    website: string;
+    locationCity: string;
+    locationState: string;
+    programType: string[];
+    levelOfCare: string[];
+    genderServed: string[];
+    specialties: string[];
+    ageMin: string;
+    ageMax: string;
+    overview: string;
+    admissionsContact: string;
+  };
+  contact: { firstName: string; lastName: string; role: string; email: string; phone: string };
+  notes: string;
+}
+
+export function apiListingMeta(): Promise<ListingMeta> {
+  return claimGet({ action: 'listingMeta' });
+}
+
+// Emails the request to the BlueStep reviewer; nothing is listed until they approve.
+export function apiRequestListing(req: ListingRequest): Promise<{ received: boolean; emailMasked: string }> {
+  return claimPost('requestListing', req as unknown as Record<string, unknown>);
+}
+
 // Ask the platform to email a set-password link. Scripts can't write the
 // system Password field, so a new rep sets theirs through BlueStep's own
 // "Need help logging in?" flow (the same form login trouble posts). Best

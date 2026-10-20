@@ -4,6 +4,7 @@
    Routes (at the host root):
      /            → Landing (public search + claim entry)
      /claim/:id   → ClaimFlow (public self-serve claim)
+     /add         → RequestListing (ask to add a program that isn't listed)
      /portal      → the signed-in portal below
      /admin/*     → AdminPage (global supers only; unlinked)
 
@@ -32,6 +33,7 @@ import Landing from './Landing';
 import LoginGate from './LoginGate';
 import ProgramEditor from './ProgramEditor';
 import ProgramPicker from './ProgramPicker';
+import RequestListing from './RequestListing';
 import { Icon, Spinner, ToastProvider, TopBar } from './ui';
 
 const LOGOUT_URL = '/shared/login/logout';
@@ -44,6 +46,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/claim/:id" element={<ClaimFlow />} />
+        <Route path="/add" element={<RequestListing />} />
         <Route path="/portal/*" element={<Portal />} />
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
