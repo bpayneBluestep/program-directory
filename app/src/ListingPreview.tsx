@@ -7,7 +7,7 @@
    ===================================================================== */
 
 import type { Contact } from './api';
-import { StatusBadge } from './ui';
+import { StatusBadge, VerifiedBadge } from './ui';
 
 interface Props {
   programName: string;
@@ -17,6 +17,8 @@ interface Props {
   contacts: Contact[];
   logoUrl: string;
   portalStatus: string;
+  verified?: boolean;
+  lastVerified?: string;
 }
 
 // Strip a protocol + trailing slash for a tidy display host.
@@ -34,6 +36,8 @@ export default function ListingPreview({
   contacts,
   logoUrl,
   portalStatus,
+  verified,
+  lastVerified,
 }: Props) {
   const host = prettyHost(website);
   const named = contacts.filter((c) => (c.name || c.role || c.phone || c.email));
@@ -54,6 +58,7 @@ export default function ListingPreview({
           <div className="preview-title-wrap">
             <h3 className="preview-name">{programName.trim() || 'Your program name'}</h3>
             {host ? <span className="preview-host">{host}</span> : <span className="preview-host preview-muted">website.org</span>}
+            {verified ? <VerifiedBadge lastVerified={lastVerified} /> : null}
           </div>
         </div>
 

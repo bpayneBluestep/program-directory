@@ -5,10 +5,14 @@
    ===================================================================== */
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { monthYear } from './api';
 
 /* ---- icons (inline SVG, currentColor) ---- */
 
-type IconName = 'check' | 'upload' | 'logout' | 'plus' | 'trash' | 'external' | 'switch' | 'alert' | 'x';
+type IconName =
+  | 'check' | 'upload' | 'logout' | 'plus' | 'trash' | 'external' | 'switch' | 'alert' | 'x'
+  | 'search' | 'shield' | 'clock' | 'arrowRight' | 'arrowLeft' | 'mail' | 'map' | 'building' | 'lock';
 
 const PATHS: Record<IconName, ReactNode> = {
   check: <path d="M20 6 9 17l-5-5" />,
@@ -20,6 +24,15 @@ const PATHS: Record<IconName, ReactNode> = {
   switch: <><path d="m18 8 4 4-4 4" /><path d="M2 12h20" /><path d="m6 16-4-4 4-4" /></>,
   alert: <><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" /></>,
   x: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
+  shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" /></>,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  arrowRight: <><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>,
+  arrowLeft: <><path d="M19 12H5" /><path d="m11 18-6-6 6-6" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+  map: <><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" /><circle cx="12" cy="10" r="2.5" /></>,
+  building: <><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1" /><path d="M10 21v-3h4v3" /></>,
+  lock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
 };
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
@@ -70,6 +83,42 @@ export function StatusBadge({ status }: { status: string }) {
       <span className="badge-dot" aria-hidden="true" />
       {label}
     </span>
+  );
+}
+
+/* ---- verified badge (a rep signed in and saved; never expires for now) ---- */
+
+export function VerifiedBadge({ lastVerified, compact = false }: { lastVerified?: string; compact?: boolean }) {
+  const when = monthYear(lastVerified);
+  return (
+    <span className="badge badge-verified" title={when ? `Verified by the program · ${when}` : 'Verified by the program'}>
+      <Icon name="shield" size={13} />
+      {compact || !when ? 'Verified' : `Verified · ${when}`}
+    </span>
+  );
+}
+
+/* ---- brand chrome ---- */
+
+export function Wordmark({ to = '/' }: { to?: string }) {
+  return (
+    <Link to={to} className="wordmark" aria-label="BlueStep Program Directory home">
+      <span className="wordmark-mark" aria-hidden="true">PD</span>
+      <span className="wordmark-text">
+        <span className="wordmark-name">Program Directory</span>
+        <span className="wordmark-by">by BlueStep</span>
+      </span>
+    </Link>
+  );
+}
+
+export function TopBar({ children }: { children?: ReactNode }) {
+  return (
+    <header className="topbar">
+      <Wordmark />
+      <div className="topbar-spacer" />
+      {children}
+    </header>
   );
 }
 

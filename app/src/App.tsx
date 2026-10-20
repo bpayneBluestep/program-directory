@@ -1,16 +1,23 @@
 /* =====================================================================
-   App.tsx — the portal shell + boot flow.
+   App.tsx — routes + the portal shell.
 
-   Boot: probe /session.
-     logged out            → LoginGate
-     logged in, 0 programs  → empty state
-     logged in, 1 program   → straight into its editor
-     logged in, 2+ programs → picker, then editor
+   Routes (under the /spa basename):
+     /            → Landing (public search + claim entry)
+     /claim/:id   → ClaimFlow (public self-serve claim)
+     /portal      → the signed-in portal below
+
+   Portal boot: probe /session.
+     logged out                → LoginGate
+     logged in, nothing         → empty state pointing to the claim flow
+     logged in, only pending    → "claim under review" state
+     logged in, 1 editable, no pending → straight into its editor
+     otherwise                  → picker (editable + pending cards), then editor
    The header shows the signed-in name + a Logout affordance. Session loss
    at any point (a call throwing LoggedOutError) drops back to the gate.
    ===================================================================== */
 
 import { useCallback, useEffect, useState } from 'react';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import {
   apiGetMyPrograms,
   apiSession,
@@ -18,10 +25,12 @@ import {
   type ProgramSummary,
   type Session,
 } from './api';
+import ClaimFlow from './ClaimFlow';
+import Landing from './Landing';
 import LoginGate from './LoginGate';
 import ProgramEditor from './ProgramEditor';
 import ProgramPicker from './ProgramPicker';
-import { Icon, Spinner, ToastProvider } from './ui';
+import { Icon, Spinner, ToastProvider, TopBar } from './ui';
 
 const LOGOUT_URL = '/shared/login/logout';
 
@@ -30,7 +39,12 @@ type Phase = 'booting' | 'loggedOut' | 'loadingPrograms' | 'ready';
 export default function App() {
   return (
     <ToastProvider>
-      <Portal />
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/claim/:id" element={<ClaimFlow />} />
+        <Route path="/portal/*" element={<Portal />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </ToastProvider>
   );
 }
@@ -58,8 +72,10 @@ function Portal() {
       const list = await apiGetMyPrograms();
       const safe = Array.isArray(list) ? list : [];
       setPrograms(safe);
-      // Auto-open the editor when there's exactly one program.
-      setSelectedId(safe.length === 1 ? safe[0].id : null);
+      // Auto-open the editor when there's exactly one editable program and
+      // nothing under review to tell them about.
+      const editable = safe.filter((p) => !p.pending);
+      setSelectedId(editable.length === 1 && editable.length === safe.length ? editable[0].id : null);
       setPhase('ready');
     } catch (err) {
       if (err instanceof LoggedOutError) {
@@ -162,11 +178,7 @@ function AppHeader({ fullName, onLogout }: { fullName: string; onLogout: () => v
     .map((w) => w.charAt(0).toUpperCase())
     .join('');
   return (
-    <header className="app-header">
-      <div className="wordmark">
-        <span className="wordmark-mark">PD</span>
-        <span className="wordmark-text">Program Portal</span>
-      </div>
+    <TopBar>
       <div className="app-header-right">
         {fullName ? (
           <span className="app-user">
@@ -179,7 +191,7 @@ function AppHeader({ fullName, onLogout }: { fullName: string; onLogout: () => v
           <span className="app-logout-label">Log out</span>
         </button>
       </div>
-    </header>
+    </TopBar>
   );
 }
 
@@ -188,13 +200,15 @@ function EmptyState() {
     <div className="state-center">
       <div className="state-card">
         <div className="state-icon">
-          <Icon name="external" size={22} />
+          <Icon name="search" size={22} />
         </div>
         <h2 className="state-title">Your account isn&rsquo;t linked to a program yet</h2>
         <p className="state-text">
-          Once your program is connected, it will show up here to edit. Reach out to your BlueStep
-          contact to get linked.
+          Find your program in the directory and claim it. It takes about two minutes.
         </p>
+        <Link className="btn btn-primary" to="/">
+          Find and claim your program
+        </Link>
       </div>
     </div>
   );

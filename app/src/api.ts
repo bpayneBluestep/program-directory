@@ -31,6 +31,10 @@ export interface ProgramSummary {
   id: string;
   programName: string;
   portalStatus: string;
+  location?: string;
+  verified?: boolean;
+  lastVerified?: string;
+  pending?: boolean; // a claim under review — listed, not editable yet
 }
 
 export interface Contact {
@@ -55,6 +59,9 @@ export interface Program {
   contacts: Contact[] | null;
   portalStatus: string;
   logoUrl: string;
+  verified?: boolean;
+  lastVerified?: string;
+  dataSource?: string;
   [key: string]: unknown;
 }
 
@@ -323,4 +330,147 @@ export function serializeContacts(contacts: Contact[]): string {
     }))
     .filter((c) => c.name || c.role || c.phone || c.email);
   return JSON.stringify(cleaned);
+}
+
+/* =====================================================================
+   /b/claim — the public self-serve claim flow (no session needed).
+   Same { ok, data } | { ok:false, error } envelope as /b/portal.
+   ===================================================================== */
+
+const CLAIM_URL = '/b/claim';
+
+export type ClaimState = 'unclaimed' | 'managed' | 'pending';
+
+export interface ProgramHit {
+  id: string;
+  name: string;
+  location: string;
+  website: string;
+  state: ClaimState;
+}
+
+export interface ProgramPreview {
+  id: string;
+  name: string;
+  website: string;
+  domain: string;
+  location: string;
+  programType: string[];
+  levelOfCare: string[];
+  ageMin: number | null;
+  ageMax: number | null;
+  genderServed: string[];
+  specialties: string[];
+  hasAdmissions: boolean;
+  dataSource: string;
+  verified: boolean;
+  lastVerified: string;
+  state: ClaimState;
+}
+
+export interface ClaimStart {
+  token: string;
+  emailMasked: string;
+  domainMatch: boolean;
+  existingUser: boolean;
+}
+
+export interface ClaimResult {
+  outcome: 'linked' | 'pending';
+  username: string;
+  existingUser: boolean;
+  programId: string;
+  programName: string;
+}
+
+async function parseClaim(res: Response): Promise<any> {
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch (_e) {
+    throw new Error(`The directory didn't answer as expected (HTTP ${res.status}). Please try again.`);
+  }
+  if (!json || json.ok !== true) throw new Error(json && json.error ? String(json.error) : 'Request failed.');
+  return json.data;
+}
+
+async function claimGet(params: Record<string, string>): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetch(`${CLAIM_URL}?${new URLSearchParams(params).toString()}`, { headers: { Accept: 'application/json' } });
+  } catch (_e) {
+    throw new Error('Could not reach the directory. Check your connection and try again.');
+  }
+  return parseClaim(res);
+}
+
+async function claimPost(action: string, payload: Record<string, unknown>): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetch(CLAIM_URL, {
+      method: 'POST',
+      credentials: 'include', // the wrong-guess counter lives in the session
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ action, ...payload }),
+    });
+  } catch (_e) {
+    throw new Error('Could not reach the directory. Check your connection and try again.');
+  }
+  return parseClaim(res);
+}
+
+export function apiSearchPrograms(q: string): Promise<ProgramHit[]> {
+  return claimGet({ action: 'search', q });
+}
+
+export function apiPreviewProgram(programId: string): Promise<ProgramPreview> {
+  return claimGet({ action: 'preview', programId });
+}
+
+export function apiClaimStart(input: {
+  programId: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  email: string;
+}): Promise<ClaimStart> {
+  return claimPost('start', input);
+}
+
+export function apiClaimVerify(token: string, code: string): Promise<ClaimResult> {
+  return claimPost('verify', { token, code });
+}
+
+// Ask the platform to email a set-password link. Scripts can't write the
+// system Password field, so a new rep sets theirs through BlueStep's own
+// "Need help logging in?" flow (the same form login trouble posts). Best
+// effort: the outcome screen also tells them where to request it again.
+export async function requestPasswordEmail(username: string): Promise<boolean> {
+  const body = new URLSearchParams();
+  body.set('username', username);
+  body.set('_postEvent', 'commit');
+  try {
+    const res = await fetch('/shared/login/emailsent.jsp', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    return res.ok;
+  } catch (_e) {
+    return false;
+  }
+}
+
+export const PASSWORD_HELP_URL = '/shared/login/logintrouble.jsp';
+
+/* ---- display helpers ---- */
+
+// "Oct 2026" from an ISO date (or '' when unset/unparseable).
+export function monthYear(iso?: string): string {
+  if (!iso) return '';
+  const m = /^(\d{4})-(\d{2})/.exec(iso);
+  if (!m) return '';
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${names[Number(m[2]) - 1] || ''} ${m[1]}`.trim();
 }

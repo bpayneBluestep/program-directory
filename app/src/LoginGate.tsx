@@ -7,7 +7,9 @@
    ===================================================================== */
 
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { login, nativeLoginSubmit } from './api';
+import { Wordmark } from './ui';
 
 export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [username, setUsername] = useState('');
@@ -43,31 +45,24 @@ export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => 
       {/* Left: brand panel (hidden on small screens) */}
       <aside className="login-brand" aria-hidden="true">
         <div className="login-brand-inner">
-          <div className="wordmark wordmark-onbrand">
-            <span className="wordmark-mark">PD</span>
-            <span className="wordmark-text">Program Portal</span>
-          </div>
+          <p className="eyebrow eyebrow-onbrand">BlueStep Program Directory</p>
           <p className="login-brand-lead">
-            Your program, in the words of the people who run it.
+            Your program, described by the people who run it.
           </p>
           <p className="login-brand-sub">
-            Keep your directory listing current — what you treat, who to reach, and the story
-            families read first.
+            Keep your listing current: what you treat, who you serve, and who a consultant should call.
           </p>
         </div>
-        <div className="login-brand-footer">A service of the Program Directory</div>
+        <div className="login-brand-footer">Free for every program, always.</div>
       </aside>
 
       {/* Right: sign-in form */}
       <main className="login-panel">
         <form className="login-form" onSubmit={handleSubmit} noValidate>
-          <div className="wordmark wordmark-compact">
-            <span className="wordmark-mark">PD</span>
-            <span className="wordmark-text">Program Portal</span>
-          </div>
+          <Wordmark />
 
           <h1 className="login-title">Sign in</h1>
-          <p className="login-hint">Use your BlueStep username and password.</p>
+          <p className="login-hint">Use the email and password you set when you claimed your program.</p>
 
           {error ? (
             <div className="form-error" role="alert">
@@ -76,7 +71,7 @@ export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => 
           ) : null}
 
           <label className="field">
-            <span className="field-label">Username</span>
+            <span className="field-label">Email or username</span>
             <input
               className="input"
               type="text"
@@ -109,6 +104,9 @@ export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => 
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
 
+          <p className="login-alt">
+            New here? <Link to="/">Find and claim your program</Link>
+          </p>
           <p className="login-legal">
             Your password is sent only to this BlueStep site over a secure connection.
           </p>

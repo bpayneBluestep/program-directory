@@ -27,9 +27,10 @@ import {
   type Program,
 } from './api';
 import ContactsEditor from './ContactsEditor';
+import Essentials from './Essentials';
 import ListingPreview from './ListingPreview';
 import LogoUpload from './LogoUpload';
-import { Icon, Spinner, StatusBadge, useToast } from './ui';
+import { Icon, Spinner, StatusBadge, useToast, VerifiedBadge } from './ui';
 
 interface Props {
   programId: string;
@@ -40,7 +41,7 @@ interface Props {
 
 // The working, editable slice: every catalog field's value (keyed by catalog
 // key) plus the structured contacts list (contactsJson is derived on save).
-interface Draft {
+export interface Draft {
   values: Record<string, unknown>;
   contacts: Contact[];
 }
@@ -54,7 +55,7 @@ function anchorId(section: string): string {
 // Build the working draft from a loaded program per the schema. Values are
 // normalized to what each control edits: multi → string[], boolean → bool,
 // everything else → string (number kept as its string form for the input).
-function buildDraft(p: Program, meta: PortalMeta): Draft {
+export function buildDraft(p: Program, meta: PortalMeta): Draft {
   const values: Record<string, unknown> = {};
   for (const f of meta.fields) {
     if (f.widget === 'contacts') continue;
@@ -96,6 +97,8 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
   const [baseline, setBaseline] = useState<Draft | null>(null);
   const [logoUrl, setLogoUrl] = useState('');
   const [saving, setSaving] = useState(false);
+  // Unverified listings open on the guided essentials first.
+  const [guided, setGuided] = useState(false);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -110,6 +113,7 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
       setDraft(d);
       setBaseline(d);
       setLogoUrl(p.logoUrl || '');
+      setGuided(!p.verified);
     } catch (err) {
       if (err instanceof LoggedOutError) {
         onLoggedOut();
@@ -206,6 +210,26 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
     );
   }
 
+  if (guided) {
+    return (
+      <Essentials
+        programId={programId}
+        meta={meta}
+        program={program}
+        onLoggedOut={onLoggedOut}
+        onSkip={() => setGuided(false)}
+        onDone={(saved) => {
+          const d = buildDraft(saved, meta);
+          setProgram(saved);
+          setDraft(d);
+          setBaseline(d);
+          setGuided(false);
+          window.scrollTo(0, 0);
+        }}
+      />
+    );
+  }
+
   const programName = String(draft.values.programName || '');
   const navSections = [...meta.sections, LOGO_SECTION];
 
@@ -226,16 +250,25 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
             <h1 className="editor-title">{programName.trim() || program.programName || 'Untitled program'}</h1>
             <div className="editor-meta">
               <StatusBadge status={program.portalStatus} />
+              {program.verified ? <VerifiedBadge lastVerified={program.lastVerified} /> : null}
               {program.shortId ? <span className="editor-id">ID {program.shortId}</span> : null}
             </div>
           </div>
         </div>
-        {canSwitch ? (
-          <button className="btn btn-ghost" onClick={onSwitch}>
-            <Icon name="switch" size={16} />
-            Switch program
-          </button>
-        ) : null}
+        <div className="editor-head-actions">
+          {!program.verified ? (
+            <button className="btn btn-outline btn-sm" onClick={() => setGuided(true)}>
+              <Icon name="shield" size={15} />
+              Verify the essentials
+            </button>
+          ) : null}
+          {canSwitch ? (
+            <button className="btn btn-ghost btn-sm" onClick={onSwitch}>
+              <Icon name="switch" size={16} />
+              Switch program
+            </button>
+          ) : null}
+        </div>
       </header>
 
       {/* Section jump nav */}
@@ -306,6 +339,8 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
             contacts={draft.contacts}
             logoUrl={logoUrl}
             portalStatus={program.portalStatus}
+            verified={program.verified === true}
+            lastVerified={program.lastVerified}
           />
         </aside>
       </div>
@@ -346,7 +381,7 @@ interface FieldControlProps {
   onContactsChange: (next: Contact[]) => void;
 }
 
-function FieldControl({ field, value, options, contacts, disabled, onChange, onContactsChange }: FieldControlProps) {
+export function FieldControl({ field, value, options, contacts, disabled, onChange, onContactsChange }: FieldControlProps) {
   // Structured contacts editor.
   if (field.widget === 'contacts') {
     return (
