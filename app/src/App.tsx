@@ -5,6 +5,7 @@
      /            → Landing (public search + claim entry)
      /claim/:id   → ClaimFlow (public self-serve claim)
      /portal      → the signed-in portal below
+     /admin       → AdminPage (global supers only; unlinked)
 
    Portal boot: probe /session.
      logged out                → LoginGate
@@ -25,6 +26,7 @@ import {
   type ProgramSummary,
   type Session,
 } from './api';
+import AdminPage from './AdminPage';
 import ClaimFlow from './ClaimFlow';
 import Landing from './Landing';
 import LoginGate from './LoginGate';
@@ -43,6 +45,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/claim/:id" element={<ClaimFlow />} />
         <Route path="/portal/*" element={<Portal />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </ToastProvider>

@@ -474,3 +474,69 @@ export function monthYear(iso?: string): string {
   const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${names[Number(m[2]) - 1] || ''} ${m[1]}`.trim();
 }
+
+/* =====================================================================
+   /b/portalAdmin — the super-user dashboard behind /spa/admin.
+   Login-gated like /b/portal, so a signed-out call bounces to login.jsp
+   (surfaced as LoggedOutError by parsePortal).
+   ===================================================================== */
+
+export interface AdminSession {
+  loggedIn: boolean;
+  isSuper: boolean;
+  fullName: string;
+}
+
+export interface AdminPerson {
+  name: string;
+  email: string;
+}
+
+export interface AdminDashboard {
+  totals: { programs: number; managed: number; pending: number; unclaimed: number; verified: number; reps: number };
+  claimed: {
+    id: string;
+    name: string;
+    location: string;
+    status: string;
+    verified: boolean;
+    lastVerified: string;
+    lastEditedAt: string;
+    managers: AdminPerson[];
+  }[];
+  pending: { programId: string; programName: string; rep: AdminPerson }[];
+  recent: { id: string; name: string; lastEditedAt: string; lastEditedBy: string }[];
+  generatedAt: string;
+}
+
+async function adminGet(action: string): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetch(`/b/portalAdmin?action=${encodeURIComponent(action)}`, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (_e) {
+    throw new Error('Could not reach the directory. Check your connection and try again.');
+  }
+  return parsePortal(res);
+}
+
+export function apiAdminSession(): Promise<AdminSession> {
+  return adminGet('session');
+}
+
+export function apiAdminDashboard(): Promise<AdminDashboard> {
+  return adminGet('dashboard');
+}
+
+// Microsoft sign-in straight through BlueStep's OAuth service (the same call the
+// global login page's "Sign in with Microsoft" button makes), landing back on dest.
+export function microsoftLoginUrl(dest: string): string {
+  const host = window.location.host;
+  return `https://oauth2.bluestep.net/v1/login/initiate/microsoft?host=${encodeURIComponent(host)}&destUrl=${encodeURIComponent(dest)}`;
+}
+
+export function globalLoginUrl(dest: string): string {
+  return `${LOGIN_URL}?step=two&_globalLogin=true&desturl=${encodeURIComponent(dest)}`;
+}
