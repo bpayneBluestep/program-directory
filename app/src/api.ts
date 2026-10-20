@@ -530,6 +530,23 @@ export function apiAdminDashboard(): Promise<AdminDashboard> {
   return adminGet('dashboard');
 }
 
+export interface AdminProgram {
+  id: string;
+  name: string;
+  location: string;
+  website: string;
+  status: string;
+  verified: boolean;
+  lastEditedAt: string;
+  managers: number;
+}
+
+// Every program, sorted by name. Editing one goes through /b/portal, which lets a
+// global super into any program (apiGetProgram / apiSaveProgram as usual).
+export function apiAdminPrograms(): Promise<AdminProgram[]> {
+  return adminGet('programs');
+}
+
 // Microsoft sign-in straight through BlueStep's OAuth service (the same call the
 // global login page's "Sign in with Microsoft" button makes), landing back on dest.
 export function microsoftLoginUrl(dest: string): string {

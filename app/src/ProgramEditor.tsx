@@ -37,6 +37,9 @@ interface Props {
   canSwitch: boolean;
   onSwitch: () => void;
   onLoggedOut: () => void;
+  // /admin: a super editing someone else's listing. No guided essentials, and the
+  // switch button goes back to the program list.
+  admin?: boolean;
 }
 
 // The working, editable slice: every catalog field's value (keyed by catalog
@@ -87,7 +90,7 @@ function changedFields(draft: Draft, base: Draft, meta: PortalMeta): EditableFie
   return out;
 }
 
-export default function ProgramEditor({ programId, canSwitch, onSwitch, onLoggedOut }: Props) {
+export default function ProgramEditor({ programId, canSwitch, onSwitch, onLoggedOut, admin = false }: Props) {
   const [meta, setMeta] = useState<PortalMeta | null>(null);
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,7 +116,7 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
       setDraft(d);
       setBaseline(d);
       setLogoUrl(p.logoUrl || '');
-      setGuided(!p.verified);
+      setGuided(!admin && !p.verified);
     } catch (err) {
       if (err instanceof LoggedOutError) {
         onLoggedOut();
@@ -123,7 +126,7 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
     } finally {
       setLoading(false);
     }
-  }, [programId, onLoggedOut]);
+  }, [programId, onLoggedOut, admin]);
 
   useEffect(() => {
     load();
@@ -246,7 +249,7 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
             )}
           </div>
           <div>
-            <p className="editor-eyebrow">Editing your listing</p>
+            <p className="editor-eyebrow">{admin ? 'Admin edit · saving does not verify the listing' : 'Editing your listing'}</p>
             <h1 className="editor-title">{programName.trim() || program.programName || 'Untitled program'}</h1>
             <div className="editor-meta">
               <StatusBadge status={program.portalStatus} />
@@ -256,7 +259,7 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
           </div>
         </div>
         <div className="editor-head-actions">
-          {!program.verified ? (
+          {!program.verified && !admin ? (
             <button className="btn btn-outline btn-sm" onClick={() => setGuided(true)}>
               <Icon name="shield" size={15} />
               Verify the essentials
@@ -264,8 +267,8 @@ export default function ProgramEditor({ programId, canSwitch, onSwitch, onLogged
           ) : null}
           {canSwitch ? (
             <button className="btn btn-ghost btn-sm" onClick={onSwitch}>
-              <Icon name="switch" size={16} />
-              Switch program
+              <Icon name={admin ? 'arrowLeft' : 'switch'} size={16} />
+              {admin ? 'All programs' : 'Switch program'}
             </button>
           ) : null}
         </div>
