@@ -447,8 +447,9 @@ export function apiClaimVerify(token: string, code: string): Promise<ClaimResult
 // effort: the outcome screen also tells them where to request it again.
 export async function requestPasswordEmail(username: string): Promise<boolean> {
   const body = new URLSearchParams();
+  // Exactly what BlueStep's own "Need help logging in?" form posts. Adding
+  // _postEvent=commit makes emailsent.jsp reject the request.
   body.set('username', username);
-  body.set('_postEvent', 'commit');
   try {
     const res = await fetch('/shared/login/emailsent.jsp', {
       method: 'POST',
