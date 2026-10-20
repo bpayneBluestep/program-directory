@@ -1,7 +1,7 @@
 /* =====================================================================
    App.tsx — routes + the portal shell.
 
-   Routes (under the /spa basename):
+   Routes (at the host root):
      /            → Landing (public search + claim entry)
      /claim/:id   → ClaimFlow (public self-serve claim)
      /portal      → the signed-in portal below

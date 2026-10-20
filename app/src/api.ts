@@ -476,7 +476,7 @@ export function monthYear(iso?: string): string {
 }
 
 /* =====================================================================
-   /b/portalAdmin — the super-user dashboard behind /spa/admin.
+   /b/portalAdmin — the super-user dashboard behind /admin.
    Login-gated like /b/portal, so a signed-out call bounces to login.jsp
    (surfaced as LoggedOutError by parsePortal).
    ===================================================================== */

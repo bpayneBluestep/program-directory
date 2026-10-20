@@ -20,7 +20,7 @@ import {
 } from './api';
 import { Icon, Spinner, StatusBadge, TopBar, VerifiedBadge } from './ui';
 
-const ADMIN_DEST = '/spa/admin';
+const ADMIN_DEST = '/admin';
 const LOGOUT_URL = '/shared/login/logout';
 
 type Phase = 'loading' | 'signedOut' | 'notSuper' | 'ready' | 'error';

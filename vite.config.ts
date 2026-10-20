@@ -6,14 +6,17 @@ import { dirname, resolve } from 'node:path'
 const repoRoot = dirname(fileURLToPath(import.meta.url))
 
 // GitSite contract:
-//   - The app is served under the "/spa/" prefix, never at the domain root,
-//     so `base` MUST be "/spa/" for hashed asset URLs to resolve.
+//   - Routes live at the host root (/, /claim/:id, /portal, /admin): the root
+//     mount serves index.html for extensionless browser navigations.
+//   - Assets must stay under "/spa/", the only mount that streams files (the
+//     root mount 404s anything with an extension), so the build `base` is
+//     "/spa/". Dev serves from "/".
 //   - The deploy artifact is the *committed build output at the repo root*
 //     (default INDEX_PATH = "index.html"). Source lives in ./app; the build
 //     emits index.html + assets/ to the repo root.
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   root: 'app',
-  base: '/spa/',
+  base: command === 'build' ? '/spa/' : '/',
   plugins: [react()],
   build: {
     // Emit the built SPA to the repository root so the zipball root IS the
@@ -22,4 +25,4 @@ export default defineConfig({
     outDir: resolve(repoRoot),
     emptyOutDir: false,
   },
-})
+}))
