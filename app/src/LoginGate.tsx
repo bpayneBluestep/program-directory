@@ -9,7 +9,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { login, nativeLoginSubmit } from './api';
-import { ThemeToggle, Wordmark, asset } from './ui';
+import { Logo, MAIN_SITE, ThemeToggle, Wordmark } from './ui';
 
 export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [username, setUsername] = useState('');
@@ -41,30 +41,14 @@ export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => 
   }
 
   return (
-    <div className="login">
-      {/* Left: brand panel (hidden on small screens) */}
-      <aside className="login-brand" aria-hidden="true">
-        <img className="login-brand-mark" src={asset('images/mark.png')} alt="" />
-        <div className="login-brand-inner">
-          <p className="eyebrow eyebrow-onbrand">BlueStep Program Directory</p>
-          <p className="login-brand-lead">
-            Your program, described by the people who run it.
-          </p>
-          <p className="login-brand-sub">
-            Keep your listing current: what you treat, who you serve, and who a consultant should call.
-          </p>
-        </div>
-        <div className="login-brand-footer">Free for every program, always.</div>
-      </aside>
+    <div className="auth">
+      <header className="auth-top">
+        <Wordmark />
+        <ThemeToggle />
+      </header>
 
-      {/* Right: sign-in form */}
-      <main className="login-panel">
-        <form className="login-form" onSubmit={handleSubmit} noValidate>
-          <div className="login-form-top">
-            <Wordmark />
-            <ThemeToggle />
-          </div>
-
+      <main className="auth-main">
+        <form className="auth-card" onSubmit={handleSubmit} noValidate>
           <h1 className="login-title">Sign in</h1>
           <p className="login-hint">Use the email and password you set when you claimed your program.</p>
 
@@ -116,6 +100,13 @@ export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => 
           </p>
         </form>
       </main>
+
+      <footer className="auth-foot">
+        <span>Free for every program, always.</span>
+        <a href={MAIN_SITE} target="_blank" rel="noopener noreferrer" className="auth-sign">
+          <span>A platform by</span> <Logo className="side-logo" />
+        </a>
+      </footer>
     </div>
   );
 }

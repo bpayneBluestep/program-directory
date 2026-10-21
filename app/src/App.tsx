@@ -14,7 +14,7 @@
      logged in, only pending    → "claim under review" state
      logged in, 1 editable, no pending → straight into its editor
      otherwise                  → picker (editable + pending cards), then editor
-   The header shows the signed-in name + a Logout affordance. Session loss
+   The shell's sidebar shows the signed-in name + a Logout affordance. Session loss
    at any point (a call throwing LoggedOutError) drops back to the gate.
    ===================================================================== */
 
@@ -34,7 +34,7 @@ import LoginGate from './LoginGate';
 import ProgramEditor from './ProgramEditor';
 import ProgramPicker from './ProgramPicker';
 import RequestListing from './RequestListing';
-import { Icon, Spinner, ToastProvider, TopBar } from './ui';
+import { Icon, Shell, Spinner, ToastProvider } from './ui';
 
 const LOGOUT_URL = '/shared/login/logout';
 
@@ -138,9 +138,7 @@ function Portal() {
   }
 
   return (
-    <div className="app">
-      <AppHeader fullName={session?.fullName || ''} onLogout={handleLogout} />
-
+    <Shell title="My listings" account={{ name: session?.fullName || 'Signed in', onLogout: handleLogout }}>
       <main className="app-main">
         {phase === 'loadingPrograms' ? (
           <div className="state-center">
@@ -172,32 +170,7 @@ function Portal() {
           <ProgramPicker programs={programs} onPick={(id) => setSelectedId(id)} />
         )}
       </main>
-    </div>
-  );
-}
-
-function AppHeader({ fullName, onLogout }: { fullName: string; onLogout: () => void }) {
-  const initials = fullName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join('');
-  return (
-    <TopBar>
-      <div className="app-header-right">
-        {fullName ? (
-          <span className="app-user">
-            <span className="app-user-avatar" aria-hidden="true">{initials || 'U'}</span>
-            <span className="app-user-name">{fullName}</span>
-          </span>
-        ) : null}
-        <button className="btn btn-ghost btn-sm" onClick={onLogout}>
-          <Icon name="logout" size={16} />
-          <span className="app-logout-label">Log out</span>
-        </button>
-      </div>
-    </TopBar>
+    </Shell>
   );
 }
 

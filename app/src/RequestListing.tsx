@@ -6,10 +6,10 @@
    the program name from the landing search.
    ===================================================================== */
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiListingMeta, apiRequestListing, type ListingMeta, type ListingRequest } from './api';
-import { Icon, SiteFooter, Spinner, TopBar } from './ui';
+import { Icon, Shell, Spinner } from './ui';
 
 type Program = ListingRequest['program'];
 type Contact = ListingRequest['contact'];
@@ -84,171 +84,210 @@ export default function RequestListing() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  const sections: { id: string; title: string; done: boolean }[] = [
+    { id: 'basics', title: 'The basics', done: !!(program.programName.trim() && program.website.trim() && program.locationCity.trim() && program.locationState) },
+    { id: 'serve', title: 'Who you serve', done: program.programType.length > 0 || program.levelOfCare.length > 0 },
+    { id: 'story', title: 'Your story', done: !!program.overview.trim() },
+    { id: 'you', title: 'About you', done: !!(contact.firstName.trim() && contact.lastName.trim() && contact.email.trim()) },
+  ];
+
   return (
-    <div className="page">
-      <TopBar>
-        <Link className="btn btn-ghost btn-sm" to="/">
-          <Icon name="arrowLeft" size={15} /> Search
-        </Link>
-      </TopBar>
+    <Shell title="Add a program">
+      <main className="flow">
+        <aside className="flow-rail">
+          <p className="eyebrow">Add a program</p>
+          <p className="flow-rail-title">{program.programName.trim() || 'New listing request'}</p>
+          <p className="flow-rail-sub">Free, reviewed by a person, usually within a business day.</p>
+          {sentTo ? null : (
+            <ol className="stepper stepper-links" aria-label="Sections">
+              {sections.map((sec, i) => (
+                <li key={sec.id} className={sec.done ? 'is-done' : ''}>
+                  <a href={`#${sec.id}`}>
+                    <span className="stepper-dot">{sec.done ? <Icon name="check" size={12} /> : i + 1}</span>
+                    <span className="stepper-label">{sec.title}</span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="flow-rail-help">
+            Already listed? <Link to="/">Find and claim it</Link> instead.
+          </p>
+        </aside>
 
-      <main className="claim request">
-        {sentTo ? (
-          <div className="card claim-card claim-outcome">
-            <span className="outcome-icon outcome-icon-success"><Icon name="check" size={22} /></span>
-            <h1 className="claim-title">Thanks, we&rsquo;ve got it</h1>
-            <p className="muted">
-              We review every new program by hand, usually within a business day. We sent a receipt to{' '}
-              <strong>{sentTo}</strong> and we&rsquo;ll email you there as soon as {program.programName.trim() || 'your program'} is
-              listed, with a link to claim it.
-            </p>
-            <div className="claim-actions">
-              <Link className="btn btn-outline" to="/">Back to the directory</Link>
+        <div className="flow-body">
+          {sentTo ? (
+            <div className="card claim-card claim-outcome">
+              <span className="outcome-icon outcome-icon-success"><Icon name="check" size={22} /></span>
+              <h1 className="claim-title">Thanks, we&rsquo;ve got it</h1>
+              <p className="muted">
+                We review every new program by hand, usually within a business day. We sent a receipt to{' '}
+                <strong>{sentTo}</strong> and we&rsquo;ll email you there as soon as {program.programName.trim() || 'your program'} is
+                listed, with a link to claim it.
+              </p>
+              <div className="claim-actions">
+                <Link className="btn btn-outline" to="/">Back to the directory</Link>
+              </div>
             </div>
-          </div>
-        ) : !meta ? (
-          <div className="state-center"><Spinner label="Loading…" /></div>
-        ) : (
-          <form className="card claim-card" onSubmit={submit} noValidate>
-            <p className="eyebrow">Add your program</p>
-            <h1 className="claim-title">Tell us about your program</h1>
-            <p className="muted">
-              Listings are free. We&rsquo;ll review this, add your program, and email you a link to claim and finish it.
-            </p>
+          ) : !meta ? (
+            <div className="state-center"><Spinner label="Loading…" /></div>
+          ) : (
+            <form className="form-stack" onSubmit={submit} noValidate>
+              <div className="form-intro">
+                <h1 className="ws-title">Tell us about your program</h1>
+                <p className="ws-sub">We&rsquo;ll review it, add your program, and email you a link to claim and finish the listing.</p>
+              </div>
 
-            {error ? <div className="form-error" role="alert">{error}</div> : null}
+              {error ? <div className="form-error" role="alert">{error}</div> : null}
 
-            <h2 className="request-section">The basics</h2>
-            <label className="field">
-              <span className="field-label">Program name</span>
-              <input className="input" value={program.programName} onChange={(e) => setP('programName', e.target.value)} disabled={busy} autoFocus={!program.programName} />
-            </label>
-            <label className="field">
-              <span className="field-label">Website</span>
-              <input
-                className="input"
-                inputMode="url"
-                autoCapitalize="none"
-                spellCheck={false}
-                placeholder="yourprogram.org"
-                value={program.website}
-                onChange={(e) => setP('website', e.target.value)}
-                disabled={busy}
-              />
-            </label>
-            <div className="field-row">
-              <label className="field">
-                <span className="field-label">City</span>
-                <input className="input" value={program.locationCity} onChange={(e) => setP('locationCity', e.target.value)} disabled={busy} />
-              </label>
-              <label className="field">
-                <span className="field-label">State</span>
-                <select className="input select" value={program.locationState} onChange={(e) => setP('locationState', e.target.value)} disabled={busy}>
-                  <option value="">Choose…</option>
-                  {meta.locationState.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </label>
-            </div>
+              <Section id="basics" title="The basics" sub="How consultants find and recognize you.">
+                <label className="field">
+                  <span className="field-label">Program name</span>
+                  <input className="input" value={program.programName} onChange={(e) => setP('programName', e.target.value)} disabled={busy} autoFocus={!program.programName} />
+                </label>
+                <label className="field">
+                  <span className="field-label">Website</span>
+                  <input
+                    className="input"
+                    inputMode="url"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="yourprogram.org"
+                    value={program.website}
+                    onChange={(e) => setP('website', e.target.value)}
+                    disabled={busy}
+                  />
+                </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span className="field-label">City</span>
+                    <input className="input" value={program.locationCity} onChange={(e) => setP('locationCity', e.target.value)} disabled={busy} />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">State</span>
+                    <select className="input select" value={program.locationState} onChange={(e) => setP('locationState', e.target.value)} disabled={busy}>
+                      <option value="">Choose…</option>
+                      {meta.locationState.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </Section>
 
-            <h2 className="request-section">Who you serve</h2>
-            <Chips label="Program type" options={meta.programType} selected={program.programType} onToggle={(o) => toggle('programType', o)} disabled={busy} />
-            <Chips label="Level of care" options={meta.levelOfCare} selected={program.levelOfCare} onToggle={(o) => toggle('levelOfCare', o)} disabled={busy} />
-            <div className="field-row">
-              <label className="field">
-                <span className="field-label">Youngest age served</span>
-                <input className="input" type="number" inputMode="numeric" min={0} max={99} value={program.ageMin} onChange={(e) => setP('ageMin', e.target.value)} disabled={busy} />
-              </label>
-              <label className="field">
-                <span className="field-label">Oldest age served</span>
-                <input className="input" type="number" inputMode="numeric" min={0} max={99} value={program.ageMax} onChange={(e) => setP('ageMax', e.target.value)} disabled={busy} />
-              </label>
-            </div>
-            <Chips label="Gender served" options={meta.genderServed} selected={program.genderServed} onToggle={(o) => toggle('genderServed', o)} disabled={busy} />
-            <Chips label="Specialties" options={meta.specialties} selected={program.specialties} onToggle={(o) => toggle('specialties', o)} disabled={busy} />
+              <Section id="serve" title="Who you serve" sub="Pick everything that applies. You can change it later.">
+                <Chips label="Program type" options={meta.programType} selected={program.programType} onToggle={(o) => toggle('programType', o)} disabled={busy} />
+                <Chips label="Level of care" options={meta.levelOfCare} selected={program.levelOfCare} onToggle={(o) => toggle('levelOfCare', o)} disabled={busy} />
+                <div className="field-row">
+                  <label className="field">
+                    <span className="field-label">Youngest age served</span>
+                    <input className="input" type="number" inputMode="numeric" min={0} max={99} value={program.ageMin} onChange={(e) => setP('ageMin', e.target.value)} disabled={busy} />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Oldest age served</span>
+                    <input className="input" type="number" inputMode="numeric" min={0} max={99} value={program.ageMax} onChange={(e) => setP('ageMax', e.target.value)} disabled={busy} />
+                  </label>
+                </div>
+                <Chips label="Gender served" options={meta.genderServed} selected={program.genderServed} onToggle={(o) => toggle('genderServed', o)} disabled={busy} />
+                <Chips label="Specialties" options={meta.specialties} selected={program.specialties} onToggle={(o) => toggle('specialties', o)} disabled={busy} />
+              </Section>
 
-            <h2 className="request-section">Your story</h2>
-            <label className="field">
-              <span className="field-label">Overview</span>
-              <textarea
-                className="input textarea"
-                placeholder="A few sentences a family or consultant should read first: who you help and how."
-                maxLength={OVERVIEW_MAX}
-                value={program.overview}
-                onChange={(e) => setP('overview', e.target.value)}
-                disabled={busy}
-              />
-              <span className="field-help">{program.overview.length} / {OVERVIEW_MAX}</span>
-            </label>
-            <label className="field">
-              <span className="field-label">Admissions contact</span>
-              <input
-                className="input"
-                placeholder="Phone or email families should use"
-                value={program.admissionsContact}
-                onChange={(e) => setP('admissionsContact', e.target.value)}
-                disabled={busy}
-              />
-            </label>
+              <Section id="story" title="Your story" sub="What a family or consultant should read first.">
+                <label className="field">
+                  <span className="field-label">Overview</span>
+                  <textarea
+                    className="input textarea"
+                    placeholder="A few sentences: who you help and how."
+                    maxLength={OVERVIEW_MAX}
+                    value={program.overview}
+                    onChange={(e) => setP('overview', e.target.value)}
+                    disabled={busy}
+                  />
+                  <span className="field-help">{program.overview.length} / {OVERVIEW_MAX}</span>
+                </label>
+                <label className="field">
+                  <span className="field-label">Admissions contact</span>
+                  <input
+                    className="input"
+                    placeholder="Phone or email families should use"
+                    value={program.admissionsContact}
+                    onChange={(e) => setP('admissionsContact', e.target.value)}
+                    disabled={busy}
+                  />
+                </label>
+              </Section>
 
-            <h2 className="request-section">About you</h2>
-            <div className="field-row">
-              <label className="field">
-                <span className="field-label">First name</span>
-                <input className="input" autoComplete="given-name" value={contact.firstName} onChange={(e) => setC('firstName', e.target.value)} disabled={busy} />
-              </label>
-              <label className="field">
-                <span className="field-label">Last name</span>
-                <input className="input" autoComplete="family-name" value={contact.lastName} onChange={(e) => setC('lastName', e.target.value)} disabled={busy} />
-              </label>
-            </div>
-            <label className="field">
-              <span className="field-label">Your role</span>
-              <input className="input" placeholder="e.g. Admissions Director" autoComplete="organization-title" value={contact.role} onChange={(e) => setC('role', e.target.value)} disabled={busy} />
-            </label>
-            <div className="field-row">
-              <label className="field">
-                <span className="field-label">Work email</span>
-                <input
-                  className="input"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  placeholder="you@yourprogram.org"
-                  value={contact.email}
-                  onChange={(e) => setC('email', e.target.value)}
-                  disabled={busy}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">Phone <span className="field-count">(optional)</span></span>
-                <input className="input" type="tel" autoComplete="tel" value={contact.phone} onChange={(e) => setC('phone', e.target.value)} disabled={busy} />
-              </label>
-            </div>
-            <label className="field">
-              <span className="field-label">Anything else? <span className="field-count">(optional)</span></span>
-              <textarea
-                className="input textarea textarea-sm"
-                placeholder="What you'd like us to know, or the best time to reach you."
-                maxLength={1000}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                disabled={busy}
-              />
-            </label>
+              <Section id="you" title="About you" sub="We’ll send the claim link here.">
+                <div className="field-row field-row-first">
+                  <label className="field">
+                    <span className="field-label">First name</span>
+                    <input className="input" autoComplete="given-name" value={contact.firstName} onChange={(e) => setC('firstName', e.target.value)} disabled={busy} />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Last name</span>
+                    <input className="input" autoComplete="family-name" value={contact.lastName} onChange={(e) => setC('lastName', e.target.value)} disabled={busy} />
+                  </label>
+                </div>
+                <label className="field">
+                  <span className="field-label">Your role</span>
+                  <input className="input" placeholder="e.g. Admissions Director" autoComplete="organization-title" value={contact.role} onChange={(e) => setC('role', e.target.value)} disabled={busy} />
+                </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span className="field-label">Work email</span>
+                    <input
+                      className="input"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder="you@yourprogram.org"
+                      value={contact.email}
+                      onChange={(e) => setC('email', e.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Phone <span className="field-count">(optional)</span></span>
+                    <input className="input" type="tel" autoComplete="tel" value={contact.phone} onChange={(e) => setC('phone', e.target.value)} disabled={busy} />
+                  </label>
+                </div>
+                <label className="field">
+                  <span className="field-label">Anything else? <span className="field-count">(optional)</span></span>
+                  <textarea
+                    className="input textarea textarea-sm"
+                    placeholder="What you'd like us to know, or the best time to reach you."
+                    maxLength={1000}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    disabled={busy}
+                  />
+                </label>
+              </Section>
 
-            <div className="claim-actions">
-              <Link className="btn btn-ghost" to="/">Cancel</Link>
-              <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? 'Sending…' : 'Send for review'}
-              </button>
-            </div>
-          </form>
-        )}
+              <div className="actionbar">
+                <span className="muted actionbar-note">Nothing is published until we review it.</span>
+                <Link className="btn btn-ghost" to="/">Cancel</Link>
+                <button type="submit" className="btn btn-primary" disabled={busy}>
+                  {busy ? 'Sending…' : 'Send for review'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </main>
-      <SiteFooter />
-    </div>
+    </Shell>
+  );
+}
+
+function Section({ id, title, sub, children }: { id: string; title: string; sub: string; children: ReactNode }) {
+  return (
+    <section className="card form-card" id={id}>
+      <header className="form-card-head">
+        <h2 className="card-title">{title}</h2>
+        <p className="card-sub">{sub}</p>
+      </header>
+      <div className="form-card-body">{children}</div>
+    </section>
   );
 }
 

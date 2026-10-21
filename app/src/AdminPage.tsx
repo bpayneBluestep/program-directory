@@ -25,7 +25,7 @@ import {
 } from './api';
 import BackendMenu from './BackendMenu';
 import ProgramEditor from './ProgramEditor';
-import { Icon, Spinner, StatusBadge, TopBar, VerifiedBadge } from './ui';
+import { Icon, Shell, Spinner, StatusBadge, VerifiedBadge } from './ui';
 
 const ADMIN_DEST = '/admin';
 const LOGOUT_URL = '/shared/login/logout';
@@ -72,8 +72,7 @@ export default function AdminPage() {
 
   if (phase === 'signedOut') {
     return (
-      <div className="page">
-        <TopBar />
+      <Shell title="Admin">
         <main className="state-center">
           <div className="state-card admin-signin">
             <div className="state-icon">
@@ -89,14 +88,13 @@ export default function AdminPage() {
             </a>
           </div>
         </main>
-      </div>
+      </Shell>
     );
   }
 
   if (phase === 'notSuper' || phase === 'error') {
     return (
-      <div className="page">
-        <TopBar />
+      <Shell title="Admin">
         <main className="state-center">
           <div className="state-card">
             <div className="state-icon state-icon-alert">
@@ -113,28 +111,18 @@ export default function AdminPage() {
             </button>
           </div>
         </main>
-      </div>
+      </Shell>
     );
   }
 
   return (
-    <div className="page">
-      <TopBar>
-        <span className="pill pill-unclaimed">Admin</span>
-        <span className="app-user-name admin-user">{session?.fullName}</span>
-        <BackendMenu />
-        <button className="btn btn-ghost btn-sm" onClick={signOut}>
-          <Icon name="logout" size={16} />
-          <span className="app-logout-label">Sign out</span>
-        </button>
-      </TopBar>
-
+    <Shell title="Admin" admin actions={<BackendMenu />} account={{ name: session?.fullName || 'Admin', onLogout: signOut }}>
       <Routes>
         <Route index element={<Overview onSignedOut={toSignIn} />} />
         <Route path="programs/:id" element={<AdminEdit onSignedOut={toSignIn} />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
-    </div>
+    </Shell>
   );
 }
 
