@@ -4,7 +4,7 @@
    lightweight — no component library, no external assets.
    ===================================================================== */
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { monthYear } from './api';
 
@@ -12,7 +12,8 @@ import { monthYear } from './api';
 
 type IconName =
   | 'check' | 'upload' | 'logout' | 'plus' | 'trash' | 'external' | 'switch' | 'alert' | 'x'
-  | 'search' | 'shield' | 'clock' | 'arrowRight' | 'arrowLeft' | 'mail' | 'map' | 'building' | 'lock';
+  | 'search' | 'shield' | 'clock' | 'arrowRight' | 'arrowLeft' | 'mail' | 'map' | 'building' | 'lock'
+  | 'sun' | 'moon';
 
 const PATHS: Record<IconName, ReactNode> = {
   check: <path d="M20 6 9 17l-5-5" />,
@@ -33,6 +34,8 @@ const PATHS: Record<IconName, ReactNode> = {
   map: <><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" /><circle cx="12" cy="10" r="2.5" /></>,
   building: <><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1" /><path d="M10 21v-3h4v3" /></>,
   lock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
+  moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />,
 };
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
@@ -100,15 +103,82 @@ export function VerifiedBadge({ lastVerified, compact = false }: { lastVerified?
 
 /* ---- brand chrome ---- */
 
+// Matches the BlueStep Behavioral site (gitsites/bluestep-behavioral-website):
+// the same logo files, header lockup, theme toggle and footer.
+export const MAIN_SITE = 'https://behavioralbluestep.bluestep.net';
+
+/** Public asset URL. Assets live under /spa/ in production (see vite.config.ts). */
+export const asset = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+
+/** The BlueStep logo, swapped for the reversed wordmark in dark mode (CSS keys off data-theme). */
+export function Logo({ className }: { className: string }) {
+  return (
+    <>
+      <img src={asset('images/logo-light.png')} alt="BlueStep" className={`${className} ${className}-light`} />
+      <img src={asset('images/logo-dark.png')} alt="BlueStep" className={`${className} ${className}-dark`} />
+    </>
+  );
+}
+
 export function Wordmark({ to = '/' }: { to?: string }) {
   return (
     <Link to={to} className="wordmark" aria-label="BlueStep Program Directory home">
-      <span className="wordmark-mark" aria-hidden="true">PD</span>
-      <span className="wordmark-text">
-        <span className="wordmark-name">Program Directory</span>
-        <span className="wordmark-by">by BlueStep</span>
-      </span>
+      <Logo className="wordmark-logo" />
+      <span className="wordmark-name">Program Directory</span>
     </Link>
+  );
+}
+
+type Theme = 'light' | 'dark';
+const THEME_KEY = 'theme';
+const currentTheme = (): Theme => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+
+function applyTheme(t: Theme) {
+  document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'dark' ? '#0a0d12' : '#fafafb');
+}
+
+function savedTheme(): Theme | null {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return v === 'light' || v === 'dark' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Light/dark toggle. Follows the OS live until the visitor picks one, then remembers it. */
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => {
+      if (savedTheme()) return;
+      const t: Theme = mq.matches ? 'dark' : 'light';
+      applyTheme(t);
+      setTheme(t);
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  function toggle() {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    setTheme(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // Storage blocked: the choice still applies for this page view.
+    }
+  }
+
+  const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+  return (
+    <button type="button" className="theme-toggle" onClick={toggle} aria-label={label} title={label}>
+      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
+    </button>
   );
 }
 
@@ -117,8 +187,44 @@ export function TopBar({ children }: { children?: ReactNode }) {
     <header className="topbar">
       <Wordmark />
       <div className="topbar-spacer" />
+      <ThemeToggle />
       {children}
     </header>
+  );
+}
+
+export function SiteFooter() {
+  return (
+    <footer className="site-foot">
+      <div className="site-foot-inner">
+        <div className="site-foot-brand">
+          <Logo className="footer-logo" />
+          <p className="site-foot-tag">
+            The Program Directory is free for every program, always. Brought to you by BlueStep Behavioral.
+          </p>
+        </div>
+        <div>
+          <h3>Programs</h3>
+          <ul>
+            <li><Link to="/">Find your listing</Link></li>
+            <li><Link to="/add">Add your program</Link></li>
+            <li><Link to="/portal">Sign in</Link></li>
+          </ul>
+        </div>
+        <div>
+          <h3>BlueStep Behavioral</h3>
+          <ul>
+            <li><a href={MAIN_SITE}>Home</a></li>
+            <li><a href={`${MAIN_SITE}/program-directory`}>About the directory</a></li>
+            <li><a href={`${MAIN_SITE}/demo`}>Contact</a></li>
+          </ul>
+        </div>
+      </div>
+      <div className="site-foot-legal">
+        <span>&copy; {new Date().getFullYear()} BlueStep Systems. All rights reserved.</span>
+        <a href={`${MAIN_SITE}/privacy`} className="muted">Privacy</a>
+      </div>
+    </footer>
   );
 }
 
