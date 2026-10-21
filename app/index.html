@@ -3,28 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#fafafb" />
-    <script>
-      // Same as the BlueStep Behavioral site: set the theme before first paint
-      // so there is no flash. Saved choice, else OS. The key is shared in spirit,
-      // not storage: each host has its own localStorage.
-      ;(function () {
-        var t = null
-        try { t = localStorage.getItem('theme') } catch (e) {}
-        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-        document.documentElement.dataset.theme = t
-        document.querySelector('meta[name=theme-color]').content = t === 'dark' ? '#0a0d12' : '#fafafb'
-      })()
-    </script>
     <title>Program Directory</title>
     <meta name="description" content="Claim and manage your program's free listing on the BlueStep Program Directory." />
-    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
     />
   </head>
   <body>

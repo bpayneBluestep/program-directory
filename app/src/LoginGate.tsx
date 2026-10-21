@@ -9,7 +9,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { login, nativeLoginSubmit } from './api';
-import { ThemeToggle, Wordmark, asset } from './ui';
+import { Wordmark } from './ui';
 
 export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [username, setUsername] = useState('');
@@ -44,7 +44,6 @@ export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => 
     <div className="login">
       {/* Left: brand panel (hidden on small screens) */}
       <aside className="login-brand" aria-hidden="true">
-        <img className="login-brand-mark" src={asset('images/mark.png')} alt="" />
         <div className="login-brand-inner">
           <p className="eyebrow eyebrow-onbrand">BlueStep Program Directory</p>
           <p className="login-brand-lead">
@@ -60,10 +59,7 @@ export default function LoginGate({ onAuthenticated }: { onAuthenticated: () => 
       {/* Right: sign-in form */}
       <main className="login-panel">
         <form className="login-form" onSubmit={handleSubmit} noValidate>
-          <div className="login-form-top">
-            <Wordmark />
-            <ThemeToggle />
-          </div>
+          <Wordmark />
 
           <h1 className="login-title">Sign in</h1>
           <p className="login-hint">Use the email and password you set when you claimed your program.</p>

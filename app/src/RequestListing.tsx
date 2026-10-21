@@ -9,7 +9,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiListingMeta, apiRequestListing, type ListingMeta, type ListingRequest } from './api';
-import { Icon, SiteFooter, Spinner, TopBar } from './ui';
+import { Icon, Spinner, TopBar } from './ui';
 
 type Program = ListingRequest['program'];
 type Contact = ListingRequest['contact'];
@@ -247,7 +247,6 @@ export default function RequestListing() {
           </form>
         )}
       </main>
-      <SiteFooter />
     </div>
   );
 }

@@ -25,7 +25,7 @@ import {
   type ProgramPreview,
 } from './api';
 import { prettyHost } from './Landing';
-import { Icon, SiteFooter, Spinner, TopBar, VerifiedBadge } from './ui';
+import { Icon, Spinner, TopBar, VerifiedBadge } from './ui';
 
 type Step = 'confirm' | 'details' | 'verify' | 'done';
 const STEPS: { key: Step; label: string }[] = [
@@ -256,7 +256,6 @@ export default function ClaimFlow() {
           <Outcome result={result} email={result.username} />
         ) : null}
       </main>
-      <SiteFooter />
     </div>
   );
 }

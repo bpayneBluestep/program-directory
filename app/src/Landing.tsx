@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiSearchPrograms, type ClaimState, type ProgramHit } from './api';
-import { Icon, MAIN_SITE, SiteFooter, Spinner, TopBar, asset } from './ui';
+import { Icon, Spinner, TopBar } from './ui';
 
 const STATE_LABEL: Record<ClaimState, string> = {
   unclaimed: 'Unclaimed',
@@ -67,116 +67,99 @@ export default function Landing() {
 
       <main className="landing">
         <section className="hero">
-          <div className="hero-inner">
-            <p className="eyebrow">Program Directory · Free for every program</p>
-            <h1 className="display">Your program, described by the people who run it.</h1>
-            <p className="hero-sub">
-              Educational consultants use the Program Directory to find the right fit for families. Claim your
-              listing to correct it, keep it current, and earn a verified badge.
-            </p>
+          <p className="eyebrow">Free for every program · always</p>
+          <h1 className="display">Your program, described by the people who run it.</h1>
+          <p className="hero-sub">
+            Educational consultants use the Program Directory to find the right fit for families. Claim your
+            listing to correct it, keep it current, and earn a verified badge.
+          </p>
 
-            <div className="search-box">
-              <Icon name="search" size={18} />
-              <input
-                className="search-input"
-                type="search"
-                placeholder="Search for your program by name"
-                aria-label="Search for your program by name"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                autoFocus
-              />
-              {busy ? <Spinner /> : null}
-            </div>
-
-            {error ? <div className="form-error" role="alert">{error}</div> : null}
-
-            {hits ? (
-              <div className="results card">
-                {hits.length === 0 ? (
-                  <div className="results-empty">
-                    <p>
-                      <strong>No match for &ldquo;{q.trim()}&rdquo;.</strong>
-                    </p>
-                    <p className="muted">Try a shorter name. If your program isn&rsquo;t listed yet, tell us about it and we&rsquo;ll add it.</p>
-                    <Link className="btn btn-primary btn-sm results-add" to={`/add?name=${encodeURIComponent(q.trim())}`}>
-                      <Icon name="plus" size={15} /> Add your program
-                    </Link>
-                  </div>
-                ) : (
-                  <ul className="results-list">
-                    {hits.map((h) => (
-                      <li key={h.id}>
-                        <Link className="result" to={`/claim/${encodeURIComponent(h.id)}`}>
-                          <span className="result-mark" aria-hidden="true">
-                            {h.name.trim().charAt(0).toUpperCase()}
-                          </span>
-                          <span className="result-body">
-                            <span className="result-name">{h.name}</span>
-                            <span className="result-meta">
-                              {h.location ? (
-                                <>
-                                  <Icon name="map" size={13} /> {h.location}
-                                </>
-                              ) : null}
-                              {h.website ? <span className="result-host">{prettyHost(h.website)}</span> : null}
-                            </span>
-                          </span>
-                          <span className={`pill pill-${h.state}`}>{STATE_LABEL[h.state]}</span>
-                          <span className="result-go" aria-hidden="true">
-                            <Icon name="arrowRight" size={16} />
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : null}
+          <div className="search-box">
+            <Icon name="search" size={18} />
+            <input
+              className="search-input"
+              type="search"
+              placeholder="Search for your program by name"
+              aria-label="Search for your program by name"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              autoFocus
+            />
+            {busy ? <Spinner /> : null}
           </div>
+
+          {error ? <div className="form-error" role="alert">{error}</div> : null}
+
+          {hits ? (
+            <div className="results card">
+              {hits.length === 0 ? (
+                <div className="results-empty">
+                  <p>
+                    <strong>No match for &ldquo;{q.trim()}&rdquo;.</strong>
+                  </p>
+                  <p className="muted">Try a shorter name. If your program isn&rsquo;t listed yet, tell us about it and we&rsquo;ll add it.</p>
+                  <Link className="btn btn-primary btn-sm results-add" to={`/add?name=${encodeURIComponent(q.trim())}`}>
+                    <Icon name="plus" size={15} /> Add your program
+                  </Link>
+                </div>
+              ) : (
+                <ul className="results-list">
+                  {hits.map((h) => (
+                    <li key={h.id}>
+                      <Link className="result" to={`/claim/${encodeURIComponent(h.id)}`}>
+                        <span className="result-mark" aria-hidden="true">
+                          {h.name.trim().charAt(0).toUpperCase()}
+                        </span>
+                        <span className="result-body">
+                          <span className="result-name">{h.name}</span>
+                          <span className="result-meta">
+                            {h.location ? (
+                              <>
+                                <Icon name="map" size={13} /> {h.location}
+                              </>
+                            ) : null}
+                            {h.website ? <span className="result-host">{prettyHost(h.website)}</span> : null}
+                          </span>
+                        </span>
+                        <span className={`pill pill-${h.state}`}>{STATE_LABEL[h.state]}</span>
+                        <span className="result-go" aria-hidden="true">
+                          <Icon name="arrowRight" size={16} />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </section>
 
-        <section className="how-wrap">
-          <p className="eyebrow">How it works</p>
-          <h2 className="how-title">Claim your listing in a few minutes.</h2>
-          <div className="how">
-            <div className="how-step">
-              <span className="how-num">01</span>
-              <h3>Find your listing</h3>
-              <p>
-                Most programs are already here, built from public information on your website. Not listed?{' '}
-                <Link to="/add">Add your program</Link>.
-              </p>
-            </div>
-            <div className="how-step">
-              <span className="how-num">02</span>
-              <h3>Verify your work email</h3>
-              <p>We send a 6-digit code, then a link to set your password. An email at your program&rsquo;s own domain gets instant access.</p>
-            </div>
-            <div className="how-step">
-              <span className="how-num">03</span>
-              <h3>Confirm the essentials</h3>
-              <p>Four quick steps, then your listing shows a verified badge to every consultant.</p>
-            </div>
+        <section className="how">
+          <div className="how-step">
+            <span className="how-num">1</span>
+            <h3>Find your listing</h3>
+            <p>
+              Most programs are already here, built from public information on your website. Not listed?{' '}
+              <Link to="/add">Add your program</Link>.
+            </p>
           </div>
-
-          <div className="band">
-            <img className="band-mark" src={asset('images/mark.png')} alt="" aria-hidden="true" />
-            <h2>Not in the directory yet?</h2>
-            <p>Tell us about your program and we&rsquo;ll add it, usually within a business day. Listings are free, always.</p>
-            <div className="band-actions">
-              <Link className="btn btn-on-band" to="/add">
-                Add your program <Icon name="arrowRight" size={16} />
-              </Link>
-              <a className="btn btn-on-band-outline" href={`${MAIN_SITE}/program-directory`}>
-                Learn more
-              </a>
-            </div>
+          <div className="how-step">
+            <span className="how-num">2</span>
+            <h3>Verify your work email</h3>
+            <p>We send a 6-digit code, then a link to set your password. An email at your program&rsquo;s own domain gets instant access.</p>
+          </div>
+          <div className="how-step">
+            <span className="how-num">3</span>
+            <h3>Confirm the essentials</h3>
+            <p>Four quick steps, then your listing shows a verified badge to every consultant.</p>
           </div>
         </section>
       </main>
 
-      <SiteFooter />
+      <footer className="site-foot">
+        <span>BlueStep Program Directory</span>
+        <span className="muted">Listings are free for programs, forever.</span>
+      </footer>
     </div>
   );
 }
