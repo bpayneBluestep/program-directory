@@ -103,7 +103,9 @@ export function VerifiedBadge({ lastVerified, compact = false }: { lastVerified?
 export function Wordmark({ to = '/' }: { to?: string }) {
   return (
     <Link to={to} className="wordmark" aria-label="BlueStep Program Directory home">
-      <span className="wordmark-mark" aria-hidden="true">PD</span>
+      <span className="wordmark-mark" aria-hidden="true">
+        <img src={`${import.meta.env.BASE_URL}images/mark.png`} alt="" />
+      </span>
       <span className="wordmark-text">
         <span className="wordmark-name">Program Directory</span>
         <span className="wordmark-by">by BlueStep</span>
