@@ -24,8 +24,8 @@ import {
   type ClaimStart,
   type ProgramPreview,
 } from './api';
-import { ListingFacts, ListingHead } from './ListingFacts';
-import { Icon, Shell, Spinner } from './ui';
+import { prettyHost } from './Landing';
+import { Icon, SiteFooter, Spinner, TopBar, VerifiedBadge } from './ui';
 
 type Step = 'confirm' | 'details' | 'verify' | 'done';
 const STEPS: { key: Step; label: string }[] = [
@@ -117,147 +117,147 @@ export default function ClaimFlow() {
   }
 
   return (
-    <Shell title="Claim a listing">
-      <main className="flow">
-        <aside className="flow-rail">
-          <p className="eyebrow">Claim a listing</p>
-          <p className="flow-rail-title">{program ? program.name : loadError ? 'Program not found' : 'Loading…'}</p>
-          {program?.location ? <p className="flow-rail-sub">{program.location}</p> : null}
-          <Stepper current={step} />
-          <p className="flow-rail-help">
-            Stuck? <a href="mailto:bpayne@bluestep.net">Email us</a> and a person will help.
-          </p>
-        </aside>
+    <div className="page">
+      <TopBar>
+        <Link className="btn btn-ghost btn-sm" to="/">
+          <Icon name="arrowLeft" size={15} /> Search
+        </Link>
+        <Link className="btn btn-outline btn-sm" to="/portal">
+          Sign in
+        </Link>
+      </TopBar>
 
-        <div className="flow-body">
-          {loadError ? (
-            <div className="card claim-card">
-              <h1 className="claim-title">We couldn&rsquo;t find that program</h1>
-              <p className="muted">{loadError}</p>
-              <Link className="btn btn-primary" to="/">
-                Back to search
-              </Link>
+      <main className="claim">
+        <Stepper current={step} />
+
+        {loadError ? (
+          <div className="card claim-card">
+            <h1 className="claim-title">We couldn&rsquo;t find that program</h1>
+            <p className="muted">{loadError}</p>
+            <Link className="btn btn-primary" to="/">
+              Back to search
+            </Link>
+          </div>
+        ) : !program ? (
+          <div className="state-center">
+            <Spinner label="Loading the listing…" />
+          </div>
+        ) : step === 'confirm' ? (
+          <ConfirmStep program={program} onNext={() => setStep('details')} />
+        ) : step === 'details' ? (
+          <form className="card claim-card" onSubmit={sendCode} noValidate>
+            <p className="eyebrow">Claiming {program.name}</p>
+            <h1 className="claim-title">Tell us who you are</h1>
+            <p className="muted">
+              We&rsquo;ll email a 6-digit code to confirm the address. Your email becomes your sign-in.
+            </p>
+
+            {error ? <div className="form-error" role="alert">{error}</div> : null}
+
+            <div className="field-row">
+              <label className="field">
+                <span className="field-label">First name</span>
+                <input className="input" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} disabled={busy} autoFocus />
+              </label>
+              <label className="field">
+                <span className="field-label">Last name</span>
+                <input className="input" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} disabled={busy} />
+              </label>
             </div>
-          ) : !program ? (
-            <div className="state-center">
-              <Spinner label="Loading the listing…" />
-            </div>
-          ) : step === 'confirm' ? (
-            <ConfirmStep program={program} onNext={() => setStep('details')} />
-          ) : step === 'details' ? (
-            <form className="card claim-card" onSubmit={sendCode} noValidate>
-              <p className="eyebrow">Claiming {program.name}</p>
-              <h1 className="claim-title">Tell us who you are</h1>
-              <p className="muted">
-                We&rsquo;ll email a 6-digit code to confirm the address. Your email becomes your sign-in.
-              </p>
+            <label className="field">
+              <span className="field-label">Your role</span>
+              <input className="input" placeholder="e.g. Admissions Director" autoComplete="organization-title" value={role} onChange={(e) => setRole(e.target.value)} disabled={busy} />
+            </label>
+            <label className="field">
+              <span className="field-label">Work email</span>
+              <input
+                className="input"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder={domain ? `you@${domain}` : 'you@yourprogram.org'}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={busy}
+              />
+            </label>
 
-              {error ? <div className="form-error" role="alert">{error}</div> : null}
-
-              <div className="field-row">
-                <label className="field">
-                  <span className="field-label">First name</span>
-                  <input className="input" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} disabled={busy} autoFocus />
-                </label>
-                <label className="field">
-                  <span className="field-label">Last name</span>
-                  <input className="input" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} disabled={busy} />
-                </label>
+            {domain ? (
+              <div className={`callout ${emailDomain ? (looksMatched ? 'callout-success' : 'callout-warning') : 'callout-info'}`}>
+                <Icon name={emailDomain && !looksMatched ? 'clock' : 'shield'} size={16} />
+                <span>
+                  {!emailDomain ? (
+                    <>An email ending in <strong>@{domain}</strong> gets instant access. Other addresses are reviewed by our team first.</>
+                  ) : looksMatched ? (
+                    <>That matches <strong>{domain}</strong>, so you&rsquo;ll get instant access.</>
+                  ) : (
+                    <>That doesn&rsquo;t match <strong>{domain}</strong>. You can still claim; our team will confirm it before editing unlocks, usually within a business day.</>
+                  )}
+                </span>
               </div>
-              <label className="field">
-                <span className="field-label">Your role</span>
-                <input className="input" placeholder="e.g. Admissions Director" autoComplete="organization-title" value={role} onChange={(e) => setRole(e.target.value)} disabled={busy} />
-              </label>
-              <label className="field">
-                <span className="field-label">Work email</span>
-                <input
-                  className="input"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  placeholder={domain ? `you@${domain}` : 'you@yourprogram.org'}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={busy}
-                />
-              </label>
+            ) : null}
 
-              {domain ? (
-                <div className={`callout ${emailDomain ? (looksMatched ? 'callout-success' : 'callout-warning') : 'callout-info'}`}>
-                  <Icon name={emailDomain && !looksMatched ? 'clock' : 'shield'} size={16} />
-                  <span>
-                    {!emailDomain ? (
-                      <>An email ending in <strong>@{domain}</strong> gets instant access. Other addresses are reviewed by our team first.</>
-                    ) : looksMatched ? (
-                      <>That matches <strong>{domain}</strong>, so you&rsquo;ll get instant access.</>
-                    ) : (
-                      <>That doesn&rsquo;t match <strong>{domain}</strong>. You can still claim; our team will confirm it before editing unlocks, usually within a business day.</>
-                    )}
-                  </span>
-                </div>
-              ) : null}
-
-              <div className="claim-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => setStep('confirm')} disabled={busy}>
-                  Back
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={busy}>
-                  {busy ? 'Sending…' : 'Email me a code'}
-                </button>
-              </div>
-            </form>
-          ) : step === 'verify' && started ? (
-            <form className="card claim-card" onSubmit={verify} noValidate>
-              <p className="eyebrow">Claiming {program.name}</p>
-              <h1 className="claim-title">Check your email</h1>
-              <p className="muted">
-                We sent a 6-digit code to <strong>{started.emailMasked}</strong>. It expires in 15 minutes.
-              </p>
-
-              {error ? <div className="form-error" role="alert">{error}</div> : null}
-              {notice ? <div className="callout callout-info" role="status"><Icon name="mail" size={16} /><span>{notice}</span></div> : null}
-
-              <label className="field">
-                <span className="field-label">6-digit code</span>
-                <input
-                  className="input input-code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={7}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ''))}
-                  disabled={busy}
-                  autoFocus
-                />
-              </label>
-
-              {started.existingUser ? (
-                <div className="callout callout-info">
-                  <Icon name="lock" size={16} />
-                  <span>You already have an account with this email. After verifying, sign in with your existing password.</span>
-                </div>
-              ) : null}
-
-              <div className="claim-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => sendCode()} disabled={busy}>
-                  Send a new code
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={busy}>
-                  {busy ? 'Checking…' : started.existingUser ? 'Verify' : 'Verify and create my account'}
-                </button>
-              </div>
-              <button type="button" className="link-btn" onClick={() => setStep('details')} disabled={busy}>
-                Use a different email
+            <div className="claim-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setStep('confirm')} disabled={busy}>
+                Back
               </button>
-            </form>
-          ) : result ? (
-            <Outcome result={result} email={result.username} />
-          ) : null}
-        </div>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? 'Sending…' : 'Email me a code'}
+              </button>
+            </div>
+          </form>
+        ) : step === 'verify' && started ? (
+          <form className="card claim-card" onSubmit={verify} noValidate>
+            <p className="eyebrow">Claiming {program.name}</p>
+            <h1 className="claim-title">Check your email</h1>
+            <p className="muted">
+              We sent a 6-digit code to <strong>{started.emailMasked}</strong>. It expires in 15 minutes.
+            </p>
+
+            {error ? <div className="form-error" role="alert">{error}</div> : null}
+            {notice ? <div className="callout callout-info" role="status"><Icon name="mail" size={16} /><span>{notice}</span></div> : null}
+
+            <label className="field">
+              <span className="field-label">6-digit code</span>
+              <input
+                className="input input-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={7}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ''))}
+                disabled={busy}
+                autoFocus
+              />
+            </label>
+
+            {started.existingUser ? (
+              <div className="callout callout-info">
+                <Icon name="lock" size={16} />
+                <span>You already have an account with this email. After verifying, sign in with your existing password.</span>
+              </div>
+            ) : null}
+
+            <div className="claim-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => sendCode()} disabled={busy}>
+                Send a new code
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? 'Checking…' : started.existingUser ? 'Verify' : 'Verify and create my account'}
+              </button>
+            </div>
+            <button type="button" className="link-btn" onClick={() => setStep('details')} disabled={busy}>
+              Use a different email
+            </button>
+          </form>
+        ) : result ? (
+          <Outcome result={result} email={result.username} />
+        ) : null}
       </main>
-    </Shell>
+      <SiteFooter />
+    </div>
   );
 }
 
@@ -276,13 +276,58 @@ function Stepper({ current }: { current: Step }) {
 }
 
 function ConfirmStep({ program, onNext }: { program: ProgramPreview; onNext: () => void }) {
+  const ages =
+    program.ageMin != null || program.ageMax != null
+      ? `Ages ${program.ageMin ?? '?'}–${program.ageMax ?? '?'}`
+      : '';
+  const facts = [...program.programType, ...program.levelOfCare].filter((v, i, a) => a.indexOf(v) === i);
   const crawled = /crawl/i.test(program.dataSource);
 
   return (
     <div className="card claim-card">
       <p className="eyebrow">Is this your program?</p>
-      <ListingHead program={program} as="h1" />
-      <ListingFacts program={program} />
+      <div className="listing-head">
+        <span className="result-mark result-mark-lg" aria-hidden="true">
+          {program.name.trim().charAt(0).toUpperCase()}
+        </span>
+        <div>
+          <h1 className="claim-title">{program.name}</h1>
+          <p className="listing-meta">
+            {program.location ? (
+              <span>
+                <Icon name="map" size={13} /> {program.location}
+              </span>
+            ) : null}
+            {program.website ? <span>{prettyHost(program.website)}</span> : null}
+            {program.verified ? <VerifiedBadge lastVerified={program.lastVerified} /> : null}
+          </p>
+        </div>
+      </div>
+
+      <dl className="facts">
+        {facts.length ? (
+          <div>
+            <dt>Type of care</dt>
+            <dd>{facts.join(' · ')}</dd>
+          </div>
+        ) : null}
+        {ages || program.genderServed.length ? (
+          <div>
+            <dt>Who you serve</dt>
+            <dd>{[ages, program.genderServed.join(', ')].filter(Boolean).join(' · ')}</dd>
+          </div>
+        ) : null}
+        {program.specialties.length ? (
+          <div>
+            <dt>Specialties</dt>
+            <dd>{program.specialties.join(' · ')}</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>Admissions contact</dt>
+          <dd>{program.hasAdmissions ? 'On file' : <span className="muted">Missing</span>}</dd>
+        </div>
+      </dl>
 
       {program.state === 'managed' ? (
         <div className="callout callout-info">

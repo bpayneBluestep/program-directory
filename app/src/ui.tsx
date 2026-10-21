@@ -5,7 +5,7 @@
    ===================================================================== */
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { monthYear } from './api';
 
 /* ---- icons (inline SVG, currentColor) ---- */
@@ -13,7 +13,7 @@ import { monthYear } from './api';
 type IconName =
   | 'check' | 'upload' | 'logout' | 'plus' | 'trash' | 'external' | 'switch' | 'alert' | 'x'
   | 'search' | 'shield' | 'clock' | 'arrowRight' | 'arrowLeft' | 'mail' | 'map' | 'building' | 'lock'
-  | 'sun' | 'moon' | 'grid';
+  | 'sun' | 'moon';
 
 const PATHS: Record<IconName, ReactNode> = {
   check: <path d="M20 6 9 17l-5-5" />,
@@ -36,7 +36,6 @@ const PATHS: Record<IconName, ReactNode> = {
   lock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
   moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />,
-  grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
 };
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
@@ -104,10 +103,8 @@ export function VerifiedBadge({ lastVerified, compact = false }: { lastVerified?
 
 /* ---- brand chrome ---- */
 
-// Same palette and type as the BlueStep Behavioral site, but laid out as an
-// app: a persistent sidebar (bottom tabs on phones) instead of a site header
-// and footer. The BlueStep mark is the product icon; the full logo signs the
-// sidebar foot.
+// Matches the BlueStep Behavioral site (gitsites/bluestep-behavioral-website):
+// the same logo files, header lockup, theme toggle and footer.
 export const MAIN_SITE = 'https://behavioralbluestep.bluestep.net';
 
 /** Public asset URL. Assets live under /spa/ in production (see vite.config.ts). */
@@ -123,15 +120,11 @@ export function Logo({ className }: { className: string }) {
   );
 }
 
-/** Product lockup: the BlueStep mark as the app icon, then the product name. */
 export function Wordmark({ to = '/' }: { to?: string }) {
   return (
     <Link to={to} className="wordmark" aria-label="BlueStep Program Directory home">
-      <span className="wordmark-icon"><img src={asset('images/mark.png')} alt="" /></span>
-      <span className="wordmark-text">
-        <span className="wordmark-name">Program Directory</span>
-        <span className="wordmark-by">by BlueStep</span>
-      </span>
+      <Logo className="wordmark-logo" />
+      <span className="wordmark-name">Program Directory</span>
     </Link>
   );
 }
@@ -155,7 +148,7 @@ function savedTheme(): Theme | null {
 }
 
 /** Light/dark toggle. Follows the OS live until the visitor picks one, then remembers it. */
-export function ThemeToggle({ withLabel = false }: { withLabel?: boolean }) {
+export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(currentTheme);
 
   useEffect(() => {
@@ -183,119 +176,55 @@ export function ThemeToggle({ withLabel = false }: { withLabel?: boolean }) {
 
   const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
   return (
-    <button type="button" className={withLabel ? 'side-link' : 'theme-toggle'} onClick={toggle} aria-label={label} title={label}>
-      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={withLabel ? 17 : 18} />
-      {withLabel ? <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span> : null}
+    <button type="button" className="theme-toggle" onClick={toggle} aria-label={label} title={label}>
+      <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
     </button>
   );
 }
 
-export interface ShellAccount {
-  name: string;
-  onLogout: () => void;
+export function TopBar({ children }: { children?: ReactNode }) {
+  return (
+    <header className="topbar">
+      <Wordmark />
+      <div className="topbar-spacer" />
+      <ThemeToggle />
+      {children}
+    </header>
+  );
 }
 
-const NAV: { to: string; label: string; short: string; icon: IconName; end?: boolean }[] = [
-  { to: '/', label: 'Find a program', short: 'Find', icon: 'search', end: true },
-  { to: '/add', label: 'Add a program', short: 'Add', icon: 'plus' },
-  { to: '/portal', label: 'My listings', short: 'My listings', icon: 'building' },
-];
-
-/**
- * The app frame every page renders inside: sidebar (desktop) or top bar +
- * bottom tabs (phone), a breadcrumb bar, then the page. `actions` sit at the
- * right of the breadcrumb bar.
- */
-export function Shell({
-  title,
-  actions,
-  account,
-  admin = false,
-  children,
-}: {
-  title: string;
-  actions?: ReactNode;
-  account?: ShellAccount;
-  admin?: boolean;
-  children: ReactNode;
-}) {
-  const nav = admin ? [...NAV, { to: '/admin', label: 'Admin', short: 'Admin', icon: 'grid' as IconName }] : NAV;
-  const initials = (account?.name || '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join('');
-
+export function SiteFooter() {
   return (
-    <div className="shell">
-      <aside className="side">
-        <Wordmark />
-        <nav className="side-nav" aria-label="Main">
-          {nav.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `side-link${isActive ? ' is-active' : ''}`}>
-              <Icon name={n.icon} size={17} />
-              <span>{n.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="side-note">
-          <span className="side-note-dot" aria-hidden="true" />
-          Free for every program, always.
-        </div>
-
-        <div className="side-foot">
-          <ThemeToggle withLabel />
-          {account ? (
-            <div className="side-account">
-              <span className="app-user-avatar" aria-hidden="true">{initials || 'U'}</span>
-              <span className="side-account-name">{account.name}</span>
-              <button className="btn btn-ghost btn-icon btn-sm" onClick={account.onLogout} aria-label="Log out" title="Log out">
-                <Icon name="logout" size={16} />
-              </button>
-            </div>
-          ) : (
-            <Link className="btn btn-outline btn-sm btn-block" to="/portal">
-              Sign in
-            </Link>
-          )}
-          <a className="side-sign" href={MAIN_SITE} target="_blank" rel="noopener noreferrer" title="BlueStep Behavioral">
-            <Logo className="side-logo" />
-          </a>
-        </div>
-      </aside>
-
-      <div className="shell-main">
-        <header className="shell-bar">
-          <span className="shell-bar-brand"><Wordmark /></span>
-          <p className="crumbs">
-            <span className="crumbs-root">Program Directory</span>
-            <span className="crumbs-sep" aria-hidden="true">/</span>
-            <span className="crumbs-here">{title}</span>
+    <footer className="site-foot">
+      <div className="site-foot-inner">
+        <div className="site-foot-brand">
+          <Logo className="footer-logo" />
+          <p className="site-foot-tag">
+            The Program Directory is free for every program, always. Brought to you by BlueStep Behavioral.
           </p>
-          <div className="shell-bar-actions">
-            {actions}
-            <span className="shell-bar-theme"><ThemeToggle /></span>
-            {account ? (
-              <button className="btn btn-ghost btn-icon btn-sm shell-bar-logout" onClick={account.onLogout} aria-label="Log out">
-                <Icon name="logout" size={16} />
-              </button>
-            ) : null}
-          </div>
-        </header>
-        {children}
+        </div>
+        <div>
+          <h3>Programs</h3>
+          <ul>
+            <li><Link to="/">Find your listing</Link></li>
+            <li><Link to="/add">Add your program</Link></li>
+            <li><Link to="/portal">Sign in</Link></li>
+          </ul>
+        </div>
+        <div>
+          <h3>BlueStep Behavioral</h3>
+          <ul>
+            <li><a href={MAIN_SITE}>Home</a></li>
+            <li><a href={`${MAIN_SITE}/program-directory`}>About the directory</a></li>
+            <li><a href={`${MAIN_SITE}/demo`}>Contact</a></li>
+          </ul>
+        </div>
       </div>
-
-      <nav className="tabbar" aria-label="Main">
-        {nav.map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `tab${isActive ? ' is-active' : ''}`}>
-            <Icon name={n.icon} size={20} />
-            <span>{n.short}</span>
-          </NavLink>
-        ))}
-      </nav>
-    </div>
+      <div className="site-foot-legal">
+        <span>&copy; {new Date().getFullYear()} BlueStep Systems. All rights reserved.</span>
+        <a href={`${MAIN_SITE}/privacy`} className="muted">Privacy</a>
+      </div>
+    </footer>
   );
 }
 
