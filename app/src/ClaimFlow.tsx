@@ -1,13 +1,15 @@
 /* =====================================================================
    ClaimFlow.tsx — /claim/:id. Four steps:
      1. Confirm   — the listing as it stands today ("is this you?")
-     2. Details   — name, role, work email → a 6-digit code is emailed
-     3. Verify    — the 6-digit code
-     4. Outcome   — linked: go set a password (new) or sign in (existing);
-                    pending: a person reviews it, editing unlocks on approval.
-   New reps get the platform's own set-password email right after verify:
-   scripts can't write the system Password field, so the endpoint creates
-   the login and BlueStep's login-trouble flow hands them the password step.
+     2. Details   — name, role, work email
+     3. Verify    — new email: "check your email" for the platform invite,
+                    where they choose a password and are signed in (the
+                    claim is applied on their first portal visit);
+                    existing account: the 6-digit code
+     4. Outcome   — existing accounts only. linked: sign in; pending: a
+                    person reviews it, editing unlocks on approval.
+   Scripts can't write the system Password field, so new reps get their
+   account from a platform invite (/b/claimInvite) instead of a code.
    The domain rule (email domain = program website) is decided server-side;
    the UI only previews it so the rep knows which email gets instant access.
    ===================================================================== */
@@ -15,11 +17,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
+  apiClaimInvite,
   apiClaimStart,
   apiClaimVerify,
   apiPreviewProgram,
-  PASSWORD_HELP_URL,
-  requestPasswordEmail,
+  type ClaimInviteSent,
   type ClaimResult,
   type ClaimStart,
   type ProgramPreview,
@@ -27,7 +29,8 @@ import {
 import { prettyHost } from './Landing';
 import { Icon, Spinner, TopBar, VerifiedBadge } from './ui';
 
-type Step = 'confirm' | 'details' | 'verify' | 'done';
+type Step = 'confirm' | 'details' | 'verify' | 'invited' | 'done';
+type CodeStart = Extract<ClaimStart, { mode: 'code' }>;
 const STEPS: { key: Step; label: string }[] = [
   { key: 'confirm', label: 'Confirm' },
   { key: 'details', label: 'Your details' },
@@ -46,7 +49,8 @@ export default function ClaimFlow() {
   const [lastName, setLastName] = useState('');
   const [role, setRole] = useState('');
   const [email, setEmail] = useState('');
-  const [started, setStarted] = useState<ClaimStart | null>(null);
+  const [started, setStarted] = useState<CodeStart | null>(null);
+  const [invited, setInvited] = useState<ClaimInviteSent | null>(null);
 
   const [code, setCode] = useState('');
   const [result, setResult] = useState<ClaimResult | null>(null);
@@ -85,12 +89,20 @@ export default function ClaimFlow() {
         role: role.trim(),
         email: email.trim(),
       });
+      if (s.mode === 'invite') {
+        const sent = await apiClaimInvite(s.ticket);
+        setInvited(sent);
+        setStarted(null);
+        if (step === 'invited') setNotice(`We sent a new link to ${sent.emailMasked}. The earlier one no longer works.`);
+        setStep('invited');
+        return;
+      }
       setStarted(s);
       setCode('');
       setStep('verify');
       if (step === 'verify') setNotice(`We sent a new code to ${s.emailMasked}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send the code.');
+      setError(err instanceof Error ? err.message : 'Could not send the email.');
     } finally {
       setBusy(false);
     }
@@ -106,7 +118,6 @@ export default function ClaimFlow() {
     setBusy(true);
     try {
       const r = await apiClaimVerify(started.token, digits);
-      if (!r.existingUser) await requestPasswordEmail(r.username);
       setResult(r);
       setStep('done');
     } catch (err) {
@@ -149,7 +160,7 @@ export default function ClaimFlow() {
             <p className="eyebrow">Claiming {program.name}</p>
             <h1 className="claim-title">Tell us who you are</h1>
             <p className="muted">
-              We&rsquo;ll email a 6-digit code to confirm the address. Your email becomes your sign-in.
+              We&rsquo;ll email you to confirm the address. Your work email becomes your sign-in.
             </p>
 
             {error ? <div className="form-error" role="alert">{error}</div> : null}
@@ -204,7 +215,7 @@ export default function ClaimFlow() {
                 Back
               </button>
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? 'Sending…' : 'Email me a code'}
+                {busy ? 'Sending…' : 'Continue'}
               </button>
             </div>
           </form>
@@ -233,25 +244,60 @@ export default function ClaimFlow() {
               />
             </label>
 
-            {started.existingUser ? (
-              <div className="callout callout-info">
-                <Icon name="lock" size={16} />
-                <span>You already have an account with this email. After verifying, sign in with your existing password.</span>
-              </div>
-            ) : null}
+            <div className="callout callout-info">
+              <Icon name="lock" size={16} />
+              <span>You already have an account with this email. After verifying, sign in with your existing password.</span>
+            </div>
 
             <div className="claim-actions">
               <button type="button" className="btn btn-ghost" onClick={() => sendCode()} disabled={busy}>
                 Send a new code
               </button>
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? 'Checking…' : started.existingUser ? 'Verify' : 'Verify and create my account'}
+                {busy ? 'Checking…' : 'Verify'}
               </button>
             </div>
             <button type="button" className="link-btn" onClick={() => setStep('details')} disabled={busy}>
               Use a different email
             </button>
           </form>
+        ) : step === 'invited' && invited ? (
+          <div className="card claim-card">
+            <p className="eyebrow">Claiming {program.name}</p>
+            <h1 className="claim-title">Check your email</h1>
+            <p className="muted">
+              We sent a link to <strong>{invited.emailMasked}</strong>. Open it to choose your password. You&rsquo;ll be
+              signed in, and your claim is applied as soon as you land in the portal.
+            </p>
+
+            {error ? <div className="form-error" role="alert">{error}</div> : null}
+            {notice ? <div className="callout callout-info" role="status"><Icon name="mail" size={16} /><span>{notice}</span></div> : null}
+
+            <div className="callout callout-info">
+              <Icon name="lock" size={16} />
+              <span>
+                When it asks for a username, use your work email (<strong>{email.trim()}</strong>). That&rsquo;s what
+                you&rsquo;ll sign in with.
+              </span>
+            </div>
+            <div className={`callout ${looksMatched ? 'callout-success' : 'callout-warning'}`}>
+              <Icon name={looksMatched ? 'shield' : 'clock'} size={16} />
+              <span>
+                {looksMatched
+                  ? <>Your email matches {prettyHost(program.website)}, so you&rsquo;ll be able to edit the listing right away.</>
+                  : <>Your email doesn&rsquo;t match the program&rsquo;s website, so a person on our team will confirm the claim after you sign up, usually within one business day.</>}
+              </span>
+            </div>
+
+            <div className="claim-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => sendCode()} disabled={busy}>
+                {busy ? 'Sending…' : 'Send it again'}
+              </button>
+            </div>
+            <button type="button" className="link-btn" onClick={() => setStep('details')} disabled={busy}>
+              Use a different email
+            </button>
+          </div>
         ) : result ? (
           <Outcome result={result} email={result.username} />
         ) : null}
@@ -261,7 +307,8 @@ export default function ClaimFlow() {
 }
 
 function Stepper({ current }: { current: Step }) {
-  const idx = STEPS.findIndex((s) => s.key === current);
+  // The invite's "check your email" sits where the code step does.
+  const idx = STEPS.findIndex((s) => s.key === (current === 'invited' ? 'verify' : current));
   return (
     <ol className="stepper" aria-label="Claim progress">
       {STEPS.map((s, i) => (
@@ -357,18 +404,8 @@ function ConfirmStep({ program, onNext }: { program: ProgramPreview; onNext: () 
   );
 }
 
+// The code path only: these reps already have an account and a password.
 function Outcome({ result, email }: { result: ClaimResult; email: string }) {
-  const passwordStep = !result.existingUser ? (
-    <div className="callout callout-info outcome-next">
-      <Icon name="mail" size={16} />
-      <span>
-        <strong>Next: set your password.</strong> We just emailed <strong>{email}</strong> a link to choose one. Your
-        email is your username. No email in a few minutes?{' '}
-        <a href={PASSWORD_HELP_URL}>Send it again</a>.
-      </span>
-    </div>
-  ) : null;
-
   if (result.outcome === 'pending') {
     return (
       <div className="card claim-card claim-outcome">
@@ -379,7 +416,6 @@ function Outcome({ result, email }: { result: ClaimResult; email: string }) {
           person on our team will confirm it, usually within one business day. We&rsquo;ll email you the moment
           editing unlocks.
         </p>
-        {passwordStep}
         <div className="claim-actions">
           <Link className="btn btn-outline" to="/">Back to the directory</Link>
           <Link className="btn btn-primary" to="/portal">Sign in</Link>
@@ -392,11 +428,8 @@ function Outcome({ result, email }: { result: ClaimResult; email: string }) {
       <span className="outcome-icon outcome-icon-success"><Icon name="check" size={22} /></span>
       <h1 className="claim-title">{result.programName} is yours.</h1>
       <p>
-        {result.existingUser
-          ? <>Sign in with <strong>{email}</strong> to confirm your essentials and earn the verified badge.</>
-          : <>Your work email matched, so you have instant access. Once your password is set, sign in to confirm your essentials and earn the verified badge.</>}
+        Sign in with <strong>{email}</strong> to confirm your essentials and earn the verified badge.
       </p>
-      {passwordStep}
       <div className="claim-actions">
         <Link className="btn btn-primary" to="/portal">
           Sign in to your listing <Icon name="arrowRight" size={15} />

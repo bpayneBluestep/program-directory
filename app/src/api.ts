@@ -338,6 +338,7 @@ export function serializeContacts(contacts: Contact[]): string {
    ===================================================================== */
 
 const CLAIM_URL = '/b/claim';
+const CLAIM_INVITE_URL = '/b/claimInvite';
 
 export type ClaimState = 'unclaimed' | 'managed' | 'pending';
 
@@ -368,11 +369,22 @@ export interface ProgramPreview {
   state: ClaimState;
 }
 
-export interface ClaimStart {
-  token: string;
+// `start` answers one of two ways. An email that already has an account proves
+// the inbox with a 6-digit code (mode "code"). A new email gets no code: the
+// ticket goes to /b/claimInvite, which sends a platform invite where the rep
+// chooses their password (mode "invite").
+export type ClaimStart =
+  | { mode: 'code'; token: string; emailMasked: string; domainMatch: boolean; existingUser: true }
+  | { mode: 'invite'; ticket: string; emailMasked: string; domainMatch: boolean };
+
+export interface ClaimInviteSent {
+  sent: boolean;
   emailMasked: string;
-  domainMatch: boolean;
-  existingUser: boolean;
+  programName: string;
+}
+
+export interface ClaimFinish {
+  applied: { programId: string; programName: string; outcome: 'linked' | 'pending' }[];
 }
 
 export interface ClaimResult {
@@ -441,6 +453,32 @@ export function apiClaimVerify(token: string, code: string): Promise<ClaimResult
   return claimPost('verify', { token, code });
 }
 
+// /b/claimInvite is a mutating endpoint (it issues platform invites), so the
+// platform wants the session's CSRF token on the request. Anonymous visitors
+// get one from /csrf-token like anyone else.
+export async function apiClaimInvite(ticket: string): Promise<ClaimInviteSent> {
+  let res: Response;
+  try {
+    const tokenRes = await fetch('/csrf-token', { credentials: 'include' });
+    const csrf = (await tokenRes.text()).trim();
+    res = await fetch(CLAIM_INVITE_URL, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'b6p-csrf-token': csrf },
+      body: JSON.stringify({ ticket }),
+    });
+  } catch (_e) {
+    throw new Error('Could not reach the directory. Check your connection and try again.');
+  }
+  return parseClaim(res);
+}
+
+// Signed in: apply any claim waiting for this account's email (a new rep's
+// first portal visit after the invite sign-up). Cheap no-op otherwise.
+export function apiClaimFinish(): Promise<ClaimFinish> {
+  return claimPost('finish', {});
+}
+
 /* ---- new-listing requests (a program that isn't in the directory yet) ---- */
 
 export interface ListingMeta {
@@ -479,29 +517,6 @@ export function apiRequestListing(req: ListingRequest): Promise<{ received: bool
   return claimPost('requestListing', req as unknown as Record<string, unknown>);
 }
 
-// Ask the platform to email a set-password link. Scripts can't write the
-// system Password field, so a new rep sets theirs through BlueStep's own
-// "Need help logging in?" flow (the same form login trouble posts). Best
-// effort: the outcome screen also tells them where to request it again.
-export async function requestPasswordEmail(username: string): Promise<boolean> {
-  const body = new URLSearchParams();
-  // Exactly what BlueStep's own "Need help logging in?" form posts. Adding
-  // _postEvent=commit makes emailsent.jsp reject the request.
-  body.set('username', username);
-  try {
-    const res = await fetch('/shared/login/emailsent.jsp', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
-    return res.ok;
-  } catch (_e) {
-    return false;
-  }
-}
-
-export const PASSWORD_HELP_URL = '/shared/login/logintrouble.jsp';
 
 /* ---- display helpers ---- */
 

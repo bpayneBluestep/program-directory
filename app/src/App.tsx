@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import {
   apiGetMyPrograms,
+  apiClaimFinish,
   apiSession,
   LoggedOutError,
   type ProgramSummary,
@@ -102,6 +103,13 @@ function Portal() {
         return;
       }
       setSession(sess);
+      // A new rep's first visit after the invite sign-up: apply the claim
+      // recorded for their email before listing programs. Best effort.
+      try {
+        await apiClaimFinish();
+      } catch (_e) {
+        /* the portal still loads; the claim applies on the next visit */
+      }
       await loadPrograms();
     } catch (err) {
       if (err instanceof LoggedOutError) {
