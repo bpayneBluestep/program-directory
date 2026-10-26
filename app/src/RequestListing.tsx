@@ -9,6 +9,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiListingMeta, apiRequestListing, type ListingMeta, type ListingRequest } from './api';
+import { RecaptchaNote } from './ClaimFlow';
 import { Icon, Spinner, TopBar } from './ui';
 
 type Program = ListingRequest['program'];
@@ -244,6 +245,7 @@ export default function RequestListing() {
                 {busy ? 'Sending…' : 'Send for review'}
               </button>
             </div>
+            <RecaptchaNote />
           </form>
         )}
       </main>

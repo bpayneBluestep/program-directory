@@ -5,14 +5,17 @@
    BlueStep endpoint at /b/portal as a JSON action envelope:
      request : GET  ?action=…            |  POST { action, … }
      reply   : { ok:true, data }         |  { ok:false, error }
-   Same-origin fetch — the BlueStep session cookie rides along.
 
-   AUTH NUANCE: /b/portal is gated with basicPermissionOption:Login, so a
-   logged-OUT request 302s to /shared/login/login.jsp and fetch FOLLOWS the
-   redirect, handing back the login HTML page (HTTP 200) — not our JSON. We
-   detect that (redirected / login.jsp in the final URL / a non-JSON body)
-   and surface it as LoggedOutError so the app can show the login gate. We
-   never assume a clean 401.
+   AUTH: reps are Program Directory accounts, not BlueStep users. /b/claim
+   signs them in and hands back a session token (3 hours, no renewal); we
+   keep it in localStorage and send it as the X-PD-Session header on every
+   /b/portal and /b/claim call. A logged-out reply is { ok:false,
+   loggedOut:true } and surfaces as LoggedOutError so the app shows the
+   sign-in screen. BlueStep super users still reach /admin through a real
+   BlueStep login (the cookie), which /b/portal also honours.
+
+   Public writes (claim, sign-up, sign-in, reset, new-listing request) carry
+   an invisible reCAPTCHA v3 token the server checks with Google.
    ===================================================================== */
 
 const PORTAL_URL = '/b/portal';
@@ -25,6 +28,8 @@ export interface Session {
   userId: string;
   fullName: string;
   isSuper: boolean;
+  username?: string;
+  expiresAt?: number; // epoch ms; present for directory-account sessions
 }
 
 export interface ProgramSummary {
@@ -103,24 +108,76 @@ export class LoggedOutError extends Error {
   }
 }
 
+/* ---- directory-account session (localStorage) ---- */
+
+const SESSION_KEY = 'pd.session';
+
+interface StoredSession {
+  token: string;
+  expiresAt: number;
+}
+
+// Fallback when localStorage is unavailable (private browsing).
+let memorySession: StoredSession | null = null;
+
+// The live session, or null when absent, unreadable or past its expiry.
+export function getStoredSession(): StoredSession | null {
+  let s: StoredSession | null = memorySession;
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    if (raw) s = JSON.parse(raw);
+  } catch (_e) {
+    /* fall back to the in-memory copy */
+  }
+  if (!s || typeof s.token !== 'string' || typeof s.expiresAt !== 'number') return null;
+  if (Date.now() >= s.expiresAt) {
+    clearStoredSession();
+    return null;
+  }
+  return s;
+}
+
+function storeSession(token: string, expiresAt: number): void {
+  memorySession = { token, expiresAt };
+  try {
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(memorySession));
+  } catch (_e) {
+    /* private mode: the session lasts as long as this page */
+  }
+}
+
+export function clearStoredSession(): void {
+  memorySession = null;
+  try {
+    window.localStorage.removeItem(SESSION_KEY);
+  } catch (_e) {
+    /* nothing stored */
+  }
+}
+
+function sessionHeaders(): Record<string, string> {
+  const s = getStoredSession();
+  return s ? { 'X-PD-Session': s.token } : {};
+}
+
 // A followed login redirect is the tell that we're logged out: the final URL
-// lands on login.jsp, or fetch reports it followed a redirect.
+// lands on login.jsp, or fetch reports it followed a redirect. (/b/portalAdmin
+// is still login-gated for supers.)
 function looksLoggedOut(res: Response): boolean {
   return res.redirected || /login\.jsp/i.test(res.url);
 }
 
-// Parse a /b/portal response into its `data`, or throw. A non-JSON body (the
-// login HTML) is treated as logged out, per the auth nuance above.
+// Parse a /b/portal response into its `data`, or throw. { loggedOut:true } or a
+// non-JSON body (a login page) is treated as logged out.
 async function parsePortal(res: Response): Promise<any> {
   if (looksLoggedOut(res)) throw new LoggedOutError();
   let json: any = null;
   try {
     json = await res.json();
   } catch (_e) {
-    // The endpoint always answers JSON when authenticated; a non-JSON body
-    // means we were bounced to the login page.
     throw new LoggedOutError();
   }
+  if (json && json.loggedOut === true) throw new LoggedOutError();
   if (!json || json.ok !== true) {
     throw new Error(json && json.error ? String(json.error) : `Request failed (HTTP ${res.status}).`);
   }
@@ -132,7 +189,7 @@ async function portalGet(action: string): Promise<any> {
   try {
     res = await fetch(`${PORTAL_URL}?action=${encodeURIComponent(action)}`, {
       credentials: 'include',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...sessionHeaders() },
     });
   } catch (_e) {
     throw new Error('Could not reach the portal. Check your connection and try again.');
@@ -146,7 +203,7 @@ async function portalPost(action: string, payload: Record<string, unknown> = {})
     res = await fetch(PORTAL_URL, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...sessionHeaders() },
       body: JSON.stringify({ action, ...payload }),
     });
   } catch (_e) {
@@ -196,82 +253,6 @@ export function apiUploadLogo(
   contentType?: string,
 ): Promise<{ logoUrl: string }> {
   return portalPost('uploadLogo', { programId, dataBase64, filename, contentType });
-}
-
-/* ---- in-app login (POST credentials to the tenant login handler) ----
-   BlueStep login is a WebView FORM post (application/x-www-form-urlencoded),
-   not a JSON API. We post same-origin so the session cookie is authenticated
-   on THIS host, then re-probe /session to confirm. The password only ever
-   goes to this same-origin BlueStep host. Mechanism mirrors the proven flow
-   in gitsite-spa-starter/src/api.ts. */
-
-function loginFormBody(username: string, password: string): URLSearchParams {
-  const b = new URLSearchParams();
-  b.set('_postEvent', 'commit');
-  b.set('_postFormClass', 'myassn.user.UserLoginWebView');
-  b.set('step', 'two'); // != "one" -> doLogin() runs now (skip the step-1 round-trip)
-  b.set('myUserName', username);
-  b.set('myPassword', password);
-  b.set('rememberMe', 'false');
-  return b;
-}
-
-// Try an in-app password login. Resolves to:
-//   { ok:true }                  — session is now authenticated
-//   { ok:false, twoFactor:true } — global-user email 2FA; caller hands off
-//   { ok:false, error }          — bad credentials / locked / needs captcha
-export async function login(
-  username: string,
-  password: string,
-): Promise<{ ok: boolean; twoFactor?: boolean; error?: string }> {
-  let res: Response;
-  try {
-    res = await fetch(LOGIN_URL, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: loginFormBody(username, password).toString(),
-    });
-  } catch (_e) {
-    return { ok: false, error: 'Could not reach the sign-in service. Check your connection and try again.' };
-  }
-  // Global users are bounced to email 2FA (doLogin 302s to the verify page).
-  if (res.redirected && /\/oauth2\/v1\/login\/verify/.test(res.url)) {
-    return { ok: false, twoFactor: true };
-  }
-  // Authoritative check: did the session actually become authenticated?
-  try {
-    const sess = await apiSession();
-    if (sess && sess.loggedIn) return { ok: true };
-  } catch (_e) {
-    /* fall through to the generic failure below */
-  }
-  return { ok: false, error: 'The username or password you entered is invalid.' };
-}
-
-// Full-page native POST to the login handler with a desturl back into the SPA.
-// Used for paths an in-app fetch can't finish (global-user email 2FA): the
-// platform renders its own verify page, then returns us to `dest`.
-export function nativeLoginSubmit(username: string, password: string, dest: string): void {
-  const f = document.createElement('form');
-  f.method = 'POST';
-  f.action = `${LOGIN_URL}?desturl=${encodeURIComponent(dest)}`;
-  f.style.display = 'none';
-  const add = (n: string, v: string) => {
-    const i = document.createElement('input');
-    i.type = 'hidden';
-    i.name = n;
-    i.value = v;
-    f.appendChild(i);
-  };
-  add('_postEvent', 'commit');
-  add('_postFormClass', 'myassn.user.UserLoginWebView');
-  add('step', 'two');
-  add('myUserName', username);
-  add('myPassword', password);
-  add('rememberMe', 'false');
-  document.body.appendChild(f);
-  f.submit();
 }
 
 /* ---- helpers ---- */
@@ -338,7 +319,6 @@ export function serializeContacts(contacts: Contact[]): string {
    ===================================================================== */
 
 const CLAIM_URL = '/b/claim';
-const CLAIM_INVITE_URL = '/b/claimInvite';
 
 export type ClaimState = 'unclaimed' | 'managed' | 'pending';
 
@@ -369,30 +349,35 @@ export interface ProgramPreview {
   state: ClaimState;
 }
 
-// `start` answers one of two ways. An email that already has an account proves
-// the inbox with a 6-digit code (mode "code"). A new email gets no code: the
-// ticket goes to /b/claimInvite, which sends a platform invite where the rep
-// chooses their password (mode "invite").
-export type ClaimStart =
-  | { mode: 'code'; token: string; emailMasked: string; domainMatch: boolean; existingUser: true }
-  | { mode: 'invite'; ticket: string; emailMasked: string; domainMatch: boolean };
-
-export interface ClaimInviteSent {
-  sent: boolean;
+// `start` always emails a 6-digit code; the token carries the claim.
+export interface ClaimStart {
+  mode: 'code';
+  token: string;
   emailMasked: string;
-  programName: string;
+  domainMatch: boolean;
 }
 
-export interface ClaimFinish {
-  applied: { programId: string; programName: string; outcome: 'linked' | 'pending' }[];
-}
+// After the code: an email with an account gets the program linked (or queued
+// for review) and signs in; a new email gets a setup token for createAccount.
+export type ClaimResult =
+  | { outcome: 'linked' | 'pending'; existingAccount: true; username: string; programId: string; programName: string }
+  | { outcome: 'needsAccount'; setupToken: string; suggestedUsername: string; domainMatch: boolean; programId: string; programName: string };
 
-export interface ClaimResult {
-  outcome: 'linked' | 'pending';
+export interface AccountSummary {
+  accountId: string;
   username: string;
-  existingUser: boolean;
-  programId: string;
-  programName: string;
+  email: string;
+  fullName: string;
+}
+
+// Any call that signs the rep in (createAccount, login, resetFinish).
+export interface AuthResult {
+  token: string;
+  expiresAt: number;
+  account: AccountSummary;
+  outcome?: 'linked' | 'pending';
+  programId?: string;
+  programName?: string;
 }
 
 async function parseClaim(res: Response): Promise<any> {
@@ -409,7 +394,7 @@ async function parseClaim(res: Response): Promise<any> {
 async function claimGet(params: Record<string, string>): Promise<any> {
   let res: Response;
   try {
-    res = await fetch(`${CLAIM_URL}?${new URLSearchParams(params).toString()}`, { headers: { Accept: 'application/json' } });
+    res = await fetch(`${CLAIM_URL}?${new URLSearchParams(params).toString()}`, { headers: { Accept: 'application/json', ...sessionHeaders() } });
   } catch (_e) {
     throw new Error('Could not reach the directory. Check your connection and try again.');
   }
@@ -421,8 +406,8 @@ async function claimPost(action: string, payload: Record<string, unknown>): Prom
   try {
     res = await fetch(CLAIM_URL, {
       method: 'POST',
-      credentials: 'include', // the wrong-guess counter lives in the session
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include', // the wrong-guess counters live in the session
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...sessionHeaders() },
       body: JSON.stringify({ action, ...payload }),
     });
   } catch (_e) {
@@ -439,44 +424,92 @@ export function apiPreviewProgram(programId: string): Promise<ProgramPreview> {
   return claimGet({ action: 'preview', programId });
 }
 
-export function apiClaimStart(input: {
+export async function apiClaimStart(input: {
   programId: string;
   firstName: string;
   lastName: string;
   role: string;
   email: string;
 }): Promise<ClaimStart> {
-  return claimPost('start', input);
+  return claimPost('start', { ...input, recaptchaToken: await recaptcha('claim_start') });
 }
 
 export function apiClaimVerify(token: string, code: string): Promise<ClaimResult> {
   return claimPost('verify', { token, code });
 }
 
-// /b/claimInvite is a mutating endpoint (it issues platform invites), so the
-// platform wants the session's CSRF token on the request. Anonymous visitors
-// get one from /csrf-token like anyone else.
-export async function apiClaimInvite(ticket: string): Promise<ClaimInviteSent> {
-  let res: Response;
-  try {
-    const tokenRes = await fetch('/csrf-token', { credentials: 'include' });
-    const csrf = (await tokenRes.text()).trim();
-    res = await fetch(CLAIM_INVITE_URL, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'b6p-csrf-token': csrf },
-      body: JSON.stringify({ ticket }),
-    });
-  } catch (_e) {
-    throw new Error('Could not reach the directory. Check your connection and try again.');
-  }
-  return parseClaim(res);
+/* ---- directory accounts: sign-up, sign-in, sign-out, reset ---- */
+
+// Every successful sign-in stores its session before resolving.
+async function signedIn(p: Promise<AuthResult>): Promise<AuthResult> {
+  const r = await p;
+  storeSession(r.token, r.expiresAt);
+  return r;
 }
 
-// Signed in: apply any claim waiting for this account's email (a new rep's
-// first portal visit after the invite sign-up). Cheap no-op otherwise.
-export function apiClaimFinish(): Promise<ClaimFinish> {
-  return claimPost('finish', {});
+export async function apiCreateAccount(setupToken: string, username: string, password: string): Promise<AuthResult> {
+  const recaptchaToken = await recaptcha('create_account');
+  return signedIn(claimPost('createAccount', { setupToken, username, password, recaptchaToken }));
+}
+
+export async function apiLogin(username: string, password: string): Promise<AuthResult> {
+  const recaptchaToken = await recaptcha('login');
+  return signedIn(claimPost('login', { username, password, recaptchaToken }));
+}
+
+// Ends the session server-side; the local copy is dropped even if that fails.
+export async function apiLogout(): Promise<void> {
+  try {
+    await claimPost('logout', {});
+  } catch (_e) {
+    /* the token dies at its expiry anyway */
+  }
+  clearStoredSession();
+}
+
+// Always answers { sent:true } so it never reveals whether an account exists.
+export async function apiResetStart(identifier: string): Promise<{ sent: boolean; token: string }> {
+  return claimPost('resetStart', { identifier, recaptchaToken: await recaptcha('reset_start') });
+}
+
+export function apiResetFinish(token: string, code: string, password: string): Promise<AuthResult> {
+  return signedIn(claimPost('resetFinish', { token, code, password }));
+}
+
+/* ---- reCAPTCHA v3 (invisible) ---- */
+
+const RECAPTCHA_SITE_KEY = '6LdQMwIuAAAAAIeHWXP1jrVNO7F7_WkOndyInVyI';
+let recaptchaReady: Promise<any> | null = null;
+
+// Load Google's script once, on the first protected action.
+function loadRecaptcha(): Promise<any> {
+  if (recaptchaReady) return recaptchaReady;
+  recaptchaReady = new Promise((resolve, reject) => {
+    const w = window as any;
+    if (w.grecaptcha && w.grecaptcha.execute) {
+      w.grecaptcha.ready(() => resolve(w.grecaptcha));
+      return;
+    }
+    const el = document.createElement('script');
+    el.src = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(RECAPTCHA_SITE_KEY)}`;
+    el.async = true;
+    el.onload = () => w.grecaptcha.ready(() => resolve(w.grecaptcha));
+    el.onerror = () => {
+      recaptchaReady = null;
+      reject(new Error("We couldn't load the bot check. Check your connection or ad blocker and try again."));
+    };
+    document.head.appendChild(el);
+  });
+  return recaptchaReady;
+}
+
+async function recaptcha(action: string): Promise<string> {
+  const g = await loadRecaptcha();
+  try {
+    return await g.execute(RECAPTCHA_SITE_KEY, { action });
+  } catch (_e) {
+    throw new Error("We couldn't run the bot check. Please try again.");
+  }
 }
 
 /* ---- new-listing requests (a program that isn't in the directory yet) ---- */
@@ -513,8 +546,8 @@ export function apiListingMeta(): Promise<ListingMeta> {
 }
 
 // Emails the request to the BlueStep reviewer; nothing is listed until they approve.
-export function apiRequestListing(req: ListingRequest): Promise<{ received: boolean; emailMasked: string }> {
-  return claimPost('requestListing', req as unknown as Record<string, unknown>);
+export async function apiRequestListing(req: ListingRequest): Promise<{ received: boolean; emailMasked: string }> {
+  return claimPost('requestListing', { ...req, recaptchaToken: await recaptcha('request_listing') });
 }
 
 
@@ -544,6 +577,9 @@ export interface AdminSession {
 export interface AdminPerson {
   name: string;
   email: string;
+  username?: string;
+  lastLoginAt?: string;
+  disabled?: boolean;
 }
 
 export interface AdminDashboard {

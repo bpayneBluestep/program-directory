@@ -15,15 +15,19 @@
      logged in, 1 editable, no pending → straight into its editor
      otherwise                  → picker (editable + pending cards), then editor
    The header shows the signed-in name + a Logout affordance. Session loss
-   at any point (a call throwing LoggedOutError) drops back to the gate.
+   at any point (a call throwing LoggedOutError, or the 3-hour session
+   reaching its expiry) drops back to the gate with a "session expired" note.
+   A BlueStep super (no directory session) logs out through the platform.
    ===================================================================== */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import {
   apiGetMyPrograms,
-  apiClaimFinish,
+  apiLogout,
   apiSession,
+  clearStoredSession,
+  getStoredSession,
   LoggedOutError,
   type ProgramSummary,
   type Session,
@@ -62,10 +66,16 @@ function Portal() {
   const [programs, setPrograms] = useState<ProgramSummary[]>([]);
   const [programsError, setProgramsError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
+  const expiryTimer = useRef<number | null>(null);
 
   // Drop to the login gate — called on boot when logged out, and any time a
   // later call reports the session expired.
   const toLoginGate = useCallback(() => {
+    if (expiryTimer.current) window.clearTimeout(expiryTimer.current);
+    // Had a directory session a moment ago → tell them why they're back here.
+    setExpired((was) => was || getStoredSession() !== null);
+    clearStoredSession();
     setSession(null);
     setPrograms([]);
     setSelectedId(null);
@@ -103,12 +113,14 @@ function Portal() {
         return;
       }
       setSession(sess);
-      // A new rep's first visit after the invite sign-up: apply the claim
-      // recorded for their email before listing programs. Best effort.
-      try {
-        await apiClaimFinish();
-      } catch (_e) {
-        /* the portal still loads; the claim applies on the next visit */
+      setExpired(false);
+      // Sessions end 3 hours after sign-in, no renewal: sign out on the dot.
+      if (expiryTimer.current) window.clearTimeout(expiryTimer.current);
+      if (sess.expiresAt) {
+        expiryTimer.current = window.setTimeout(() => {
+          setExpired(true);
+          toLoginGate();
+        }, Math.max(0, sess.expiresAt - Date.now()));
       }
       await loadPrograms();
     } catch (err) {
@@ -124,11 +136,24 @@ function Portal() {
 
   useEffect(() => {
     boot();
+    return () => {
+      if (expiryTimer.current) window.clearTimeout(expiryTimer.current);
+    };
   }, [boot]);
 
-  function handleLogout() {
-    // Full-page navigation to the platform logout, returning to the SPA.
-    window.location.href = `${LOGOUT_URL}?desturl=${encodeURIComponent(window.location.href)}`;
+  async function handleLogout() {
+    if (session?.isSuper && !getStoredSession()) {
+      // A BlueStep super: full-page navigation to the platform logout, back here.
+      window.location.href = `${LOGOUT_URL}?desturl=${encodeURIComponent(window.location.href)}`;
+      return;
+    }
+    await apiLogout();
+    setExpired(false);
+    if (expiryTimer.current) window.clearTimeout(expiryTimer.current);
+    setSession(null);
+    setPrograms([]);
+    setSelectedId(null);
+    setPhase('loggedOut');
   }
 
   /* ---- render by phase ---- */
@@ -142,7 +167,7 @@ function Portal() {
   }
 
   if (phase === 'loggedOut') {
-    return <LoginGate onAuthenticated={boot} />;
+    return <LoginGate onAuthenticated={boot} expired={expired} />;
   }
 
   return (

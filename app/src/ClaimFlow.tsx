@@ -2,26 +2,23 @@
    ClaimFlow.tsx — /claim/:id. Four steps:
      1. Confirm   — the listing as it stands today ("is this you?")
      2. Details   — name, role, work email
-     3. Verify    — new email: "check your email" for the platform invite,
-                    where they choose a password and are signed in (the
-                    claim is applied on their first portal visit);
-                    existing account: the 6-digit code
-     4. Outcome   — existing accounts only. linked: sign in; pending: a
-                    person reviews it, editing unlocks on approval.
-   Scripts can't write the system Password field, so new reps get their
-   account from a platform invite (/b/claimInvite) instead of a code.
+     3. Verify    — the 6-digit code we email to that address
+     4. Sign-in   — a new email chooses a username + password and lands in
+                    the portal signed in; an email that already has an
+                    account gets the program added to it and signs in.
+   Reps are Program Directory accounts (not BlueStep users), created here
+   by /b/claim createAccount once the code proves the inbox.
    The domain rule (email domain = program website) is decided server-side;
    the UI only previews it so the rep knows which email gets instant access.
    ===================================================================== */
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  apiClaimInvite,
   apiClaimStart,
   apiClaimVerify,
+  apiCreateAccount,
   apiPreviewProgram,
-  type ClaimInviteSent,
   type ClaimResult,
   type ClaimStart,
   type ProgramPreview,
@@ -29,17 +26,20 @@ import {
 import { prettyHost } from './Landing';
 import { Icon, Spinner, TopBar, VerifiedBadge } from './ui';
 
-type Step = 'confirm' | 'details' | 'verify' | 'invited' | 'done';
-type CodeStart = Extract<ClaimStart, { mode: 'code' }>;
+type Step = 'confirm' | 'details' | 'verify' | 'account' | 'done';
+type NeedsAccount = Extract<ClaimResult, { outcome: 'needsAccount' }>;
+type Linked = Exclude<ClaimResult, { outcome: 'needsAccount' }>;
 const STEPS: { key: Step; label: string }[] = [
   { key: 'confirm', label: 'Confirm' },
   { key: 'details', label: 'Your details' },
   { key: 'verify', label: 'Verify' },
-  { key: 'done', label: 'Done' },
+  { key: 'account', label: 'Sign in' },
 ];
+const MIN_PASSWORD = 10;
 
 export default function ClaimFlow() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
 
   const [program, setProgram] = useState<ProgramPreview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -49,11 +49,15 @@ export default function ClaimFlow() {
   const [lastName, setLastName] = useState('');
   const [role, setRole] = useState('');
   const [email, setEmail] = useState('');
-  const [started, setStarted] = useState<CodeStart | null>(null);
-  const [invited, setInvited] = useState<ClaimInviteSent | null>(null);
+  const [started, setStarted] = useState<ClaimStart | null>(null);
 
   const [code, setCode] = useState('');
-  const [result, setResult] = useState<ClaimResult | null>(null);
+  const [setup, setSetup] = useState<NeedsAccount | null>(null);
+  const [linked, setLinked] = useState<Linked | null>(null);
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,18 +93,10 @@ export default function ClaimFlow() {
         role: role.trim(),
         email: email.trim(),
       });
-      if (s.mode === 'invite') {
-        const sent = await apiClaimInvite(s.ticket);
-        setInvited(sent);
-        setStarted(null);
-        if (step === 'invited') setNotice(`We sent a new link to ${sent.emailMasked}. The earlier one no longer works.`);
-        setStep('invited');
-        return;
-      }
       setStarted(s);
       setCode('');
-      setStep('verify');
       if (step === 'verify') setNotice(`We sent a new code to ${s.emailMasked}.`);
+      setStep('verify');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send the email.');
     } finally {
@@ -118,11 +114,35 @@ export default function ClaimFlow() {
     setBusy(true);
     try {
       const r = await apiClaimVerify(started.token, digits);
-      setResult(r);
-      setStep('done');
+      if (r.outcome === 'needsAccount') {
+        setSetup(r);
+        setUsername(r.suggestedUsername);
+        setStep('account');
+      } else {
+        setLinked(r);
+        setStep('done');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not verify the code.');
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAccount(e: FormEvent) {
+    e.preventDefault();
+    if (busy || !setup) return;
+    setError(null);
+    const u = username.trim().toLowerCase();
+    if (u.length < 3) return setError('Choose a username of at least 3 characters.');
+    if (password.length < MIN_PASSWORD) return setError(`Use at least ${MIN_PASSWORD} characters for your password.`);
+    if (password !== confirm) return setError("The two passwords don't match.");
+    setBusy(true);
+    try {
+      await apiCreateAccount(setup.setupToken, u, password);
+      navigate('/portal');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create your account.');
       setBusy(false);
     }
   }
@@ -159,9 +179,7 @@ export default function ClaimFlow() {
           <form className="card claim-card" onSubmit={sendCode} noValidate>
             <p className="eyebrow">Claiming {program.name}</p>
             <h1 className="claim-title">Tell us who you are</h1>
-            <p className="muted">
-              We&rsquo;ll email you to confirm the address. Your work email becomes your sign-in.
-            </p>
+            <p className="muted">We&rsquo;ll email you a code to confirm the address.</p>
 
             {error ? <div className="form-error" role="alert">{error}</div> : null}
 
@@ -218,6 +236,7 @@ export default function ClaimFlow() {
                 {busy ? 'Sending…' : 'Continue'}
               </button>
             </div>
+            <RecaptchaNote />
           </form>
         ) : step === 'verify' && started ? (
           <form className="card claim-card" onSubmit={verify} noValidate>
@@ -244,11 +263,6 @@ export default function ClaimFlow() {
               />
             </label>
 
-            <div className="callout callout-info">
-              <Icon name="lock" size={16} />
-              <span>You already have an account with this email. After verifying, sign in with your existing password.</span>
-            </div>
-
             <div className="claim-actions">
               <button type="button" className="btn btn-ghost" onClick={() => sendCode()} disabled={busy}>
                 Send a new code
@@ -261,45 +275,70 @@ export default function ClaimFlow() {
               Use a different email
             </button>
           </form>
-        ) : step === 'invited' && invited ? (
-          <div className="card claim-card">
+        ) : step === 'account' && setup ? (
+          <form className="card claim-card" onSubmit={createAccount} noValidate>
             <p className="eyebrow">Claiming {program.name}</p>
-            <h1 className="claim-title">Check your email</h1>
-            <p className="muted">
-              We sent a link to <strong>{invited.emailMasked}</strong>. Open it to choose your password. You&rsquo;ll be
-              signed in, and your claim is applied as soon as you land in the portal.
-            </p>
+            <h1 className="claim-title">Create your sign-in</h1>
+            <p className="muted">You&rsquo;ll use these to sign in and update your listing from now on.</p>
 
             {error ? <div className="form-error" role="alert">{error}</div> : null}
-            {notice ? <div className="callout callout-info" role="status"><Icon name="mail" size={16} /><span>{notice}</span></div> : null}
 
-            <div className="callout callout-info">
-              <Icon name="lock" size={16} />
+            <label className="field">
+              <span className="field-label">Username</span>
+              <input
+                className="input"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Password</span>
+              <input
+                className="input"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={busy}
+                autoFocus
+              />
+              <span className="field-help">At least {MIN_PASSWORD} characters. A few unrelated words work well.</span>
+            </label>
+            <label className="field">
+              <span className="field-label">Confirm password</span>
+              <input
+                className="input"
+                type="password"
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+
+            <div className={`callout ${setup.domainMatch ? 'callout-success' : 'callout-warning'}`}>
+              <Icon name={setup.domainMatch ? 'shield' : 'clock'} size={16} />
               <span>
-                When it asks for a username, use your work email (<strong>{email.trim()}</strong>). That&rsquo;s what
-                you&rsquo;ll sign in with.
-              </span>
-            </div>
-            <div className={`callout ${looksMatched ? 'callout-success' : 'callout-warning'}`}>
-              <Icon name={looksMatched ? 'shield' : 'clock'} size={16} />
-              <span>
-                {looksMatched
-                  ? <>Your email matches {prettyHost(program.website)}, so you&rsquo;ll be able to edit the listing right away.</>
-                  : <>Your email doesn&rsquo;t match the program&rsquo;s website, so a person on our team will confirm the claim after you sign up, usually within one business day.</>}
+                {setup.domainMatch
+                  ? <>Your email matches {prettyHost(program.website)}, so you can edit the listing as soon as you&rsquo;re in.</>
+                  : <>Your email doesn&rsquo;t match the program&rsquo;s website, so our team will confirm the claim first, usually within one business day. We&rsquo;ll email you when editing unlocks.</>}
               </span>
             </div>
 
             <div className="claim-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => sendCode()} disabled={busy}>
-                {busy ? 'Sending…' : 'Send it again'}
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? 'Creating your account…' : 'Create account and continue'}
               </button>
             </div>
-            <button type="button" className="link-btn" onClick={() => setStep('details')} disabled={busy}>
-              Use a different email
-            </button>
-          </div>
-        ) : result ? (
-          <Outcome result={result} email={result.username} />
+            <RecaptchaNote />
+          </form>
+        ) : linked ? (
+          <Outcome result={linked} />
         ) : null}
       </main>
     </div>
@@ -307,8 +346,7 @@ export default function ClaimFlow() {
 }
 
 function Stepper({ current }: { current: Step }) {
-  // The invite's "check your email" sits where the code step does.
-  const idx = STEPS.findIndex((s) => s.key === (current === 'invited' ? 'verify' : current));
+  const idx = current === 'done' ? STEPS.length : STEPS.findIndex((s) => s.key === current);
   return (
     <ol className="stepper" aria-label="Claim progress">
       {STEPS.map((s, i) => (
@@ -318,6 +356,18 @@ function Stepper({ current }: { current: Step }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+// Google's terms allow hiding the badge only when this text is shown instead;
+// we keep the badge and add the line where a protected form submits.
+export function RecaptchaNote() {
+  return (
+    <p className="recaptcha-note">
+      Protected by reCAPTCHA. Google&rsquo;s{' '}
+      <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Privacy Policy</a> and{' '}
+      <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer">Terms of Service</a> apply.
+    </p>
   );
 }
 
@@ -404,8 +454,10 @@ function ConfirmStep({ program, onNext }: { program: ProgramPreview; onNext: () 
   );
 }
 
-// The code path only: these reps already have an account and a password.
-function Outcome({ result, email }: { result: ClaimResult; email: string }) {
+// The email already had an account: the program was added to it (or queued for
+// review), and they sign in with their existing username and password.
+function Outcome({ result }: { result: Linked }) {
+  const signIn = `/portal?u=${encodeURIComponent(result.username)}`;
   if (result.outcome === 'pending') {
     return (
       <div className="card claim-card claim-outcome">
@@ -418,7 +470,7 @@ function Outcome({ result, email }: { result: ClaimResult; email: string }) {
         </p>
         <div className="claim-actions">
           <Link className="btn btn-outline" to="/">Back to the directory</Link>
-          <Link className="btn btn-primary" to="/portal">Sign in</Link>
+          <Link className="btn btn-primary" to={signIn}>Sign in</Link>
         </div>
       </div>
     );
@@ -428,10 +480,11 @@ function Outcome({ result, email }: { result: ClaimResult; email: string }) {
       <span className="outcome-icon outcome-icon-success"><Icon name="check" size={22} /></span>
       <h1 className="claim-title">{result.programName} is yours.</h1>
       <p>
-        Sign in with <strong>{email}</strong> to confirm your essentials and earn the verified badge.
+        You already have an account, so we added it there. Sign in as <strong>{result.username}</strong> to confirm
+        your essentials and earn the verified badge.
       </p>
       <div className="claim-actions">
-        <Link className="btn btn-primary" to="/portal">
+        <Link className="btn btn-primary" to={signIn}>
           Sign in to your listing <Icon name="arrowRight" size={15} />
         </Link>
       </div>
