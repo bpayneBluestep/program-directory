@@ -3,7 +3,7 @@
      1. Confirm   — the listing as it stands today ("is this you?")
      2. Details   — name, role, work email
      3. Verify    — the 6-digit code we email to that address
-     4. Sign-in   — a new email chooses a username + password and lands in
+     4. Sign-in   — a new email chooses a password (the email is the sign-in) and lands in
                     the portal signed in; an email that already has an
                     account gets the program added to it and signs in.
    Reps are Program Directory accounts (not BlueStep users), created here
@@ -133,8 +133,7 @@ export default function ClaimFlow() {
     e.preventDefault();
     if (busy || !setup) return;
     setError(null);
-    const u = username.trim().toLowerCase();
-    if (u.length < 3) return setError('Choose a username of at least 3 characters.');
+    const u = username.trim().toLowerCase(); // the verified email
     if (password.length < MIN_PASSWORD) return setError(`Use at least ${MIN_PASSWORD} characters for your password.`);
     if (password !== confirm) return setError("The two passwords don't match.");
     setBusy(true);
@@ -279,22 +278,14 @@ export default function ClaimFlow() {
           <form className="card claim-card" onSubmit={createAccount} noValidate>
             <p className="eyebrow">Claiming {program.name}</p>
             <h1 className="claim-title">Create your sign-in</h1>
-            <p className="muted">You&rsquo;ll use these to sign in and update your listing from now on.</p>
+            <p className="muted">Choose a password. You&rsquo;ll sign in with your email from now on.</p>
 
             {error ? <div className="form-error" role="alert">{error}</div> : null}
 
             <label className="field">
-              <span className="field-label">Username</span>
-              <input
-                className="input"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={busy}
-              />
+              <span className="field-label">Email</span>
+              {/* Read-only, but a real field so password managers save the pair. */}
+              <input className="input" type="email" autoComplete="username" value={username} readOnly />
             </label>
             <label className="field">
               <span className="field-label">Password</span>
@@ -455,7 +446,7 @@ function ConfirmStep({ program, onNext }: { program: ProgramPreview; onNext: () 
 }
 
 // The email already had an account: the program was added to it (or queued for
-// review), and they sign in with their existing username and password.
+// review), and they sign in with their email and existing password.
 function Outcome({ result }: { result: Linked }) {
   const signIn = `/portal?u=${encodeURIComponent(result.username)}`;
   if (result.outcome === 'pending') {
@@ -480,7 +471,7 @@ function Outcome({ result }: { result: Linked }) {
       <span className="outcome-icon outcome-icon-success"><Icon name="check" size={22} /></span>
       <h1 className="claim-title">{result.programName} is yours.</h1>
       <p>
-        You already have an account, so we added it there. Sign in as <strong>{result.username}</strong> to confirm
+        You already have an account, so we added it there. Sign in with <strong>{result.username}</strong> to confirm
         your essentials and earn the verified badge.
       </p>
       <div className="claim-actions">

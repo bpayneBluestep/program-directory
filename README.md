@@ -19,11 +19,11 @@ Program reps are **Program Directory accounts**, not BlueStep users (an interim
 setup until BlueStep ships a native invite flow).
 
 1. **Claim** (`/claim/:id`): name + work email, then a 6-digit code by email.
-2. **New email**: "Create your sign-in" (username + password, at least 10
+2. **New email**: "Create your sign-in": their email is the sign-in, they choose a password (at least 10
    characters). The account is created and the rep lands in `/portal`, already
    signed in. **Email that already has an account**: the program is added to it
    and the rep signs in.
-3. **Sign in** (`/portal`): username or email + password. 5 wrong tries lock the
+3. **Sign in** (`/portal`): email + password. 5 wrong tries lock the
    account for 15 minutes. "Forgot your password?" emails a reset code.
 4. **Session**: `/b/claim` returns a token, stored in `localStorage` (`pd.session`)
    and sent as the `X-PD-Session` header to `/b/portal` and `/b/claim`. It ends

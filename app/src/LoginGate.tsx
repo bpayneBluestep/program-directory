@@ -1,10 +1,10 @@
 /* =====================================================================
    LoginGate.tsx — the sign-in screen shown whenever there's no live
-   session. Reps sign in with their Program Directory username (or email)
+   session. Reps sign in with their Program Directory email
    and password via /b/claim login, which stores a 3-hour session; then the
    parent re-probes the session. "Forgot password?" swaps in a two-step
    reset: request a code, then the code + a new password (which also signs
-   them in). ?u=<username> prefills the username (the claim flow links here).
+   them in). ?u=<email> prefills the email (the claim flow links here).
    ===================================================================== */
 
 import { useState, type FormEvent } from 'react';
@@ -36,7 +36,7 @@ export default function LoginGate({ onAuthenticated, expired = false }: { onAuth
     setError(null);
     setNotice(null);
     if (!username.trim() || !password) {
-      setError('Enter your username and password to continue.');
+      setError('Enter your email and password to continue.');
       return;
     }
     setBusy(true);
@@ -56,7 +56,7 @@ export default function LoginGate({ onAuthenticated, expired = false }: { onAuth
     setError(null);
     setNotice(null);
     if (!username.trim()) {
-      setError('Enter your username or email.');
+      setError('Enter your email.');
       return;
     }
     setBusy(true);
@@ -126,14 +126,15 @@ export default function LoginGate({ onAuthenticated, expired = false }: { onAuth
           <form className="login-form" onSubmit={handleSignIn} noValidate>
             <Wordmark />
             <h1 className="login-title">Sign in</h1>
-            <p className="login-hint">Use the username and password you created when you claimed your program.</p>
+            <p className="login-hint">Use the email and password you set when you claimed your program.</p>
             {alerts}
 
             <label className="field">
-              <span className="field-label">Username or email</span>
+              <span className="field-label">Email</span>
               <input
                 className="input"
-                type="text"
+                type="email"
+                inputMode="email"
                 name="username"
                 autoComplete="username"
                 autoCapitalize="none"
@@ -176,14 +177,15 @@ export default function LoginGate({ onAuthenticated, expired = false }: { onAuth
           <form className="login-form" onSubmit={handleResetRequest} noValidate>
             <Wordmark />
             <h1 className="login-title">Reset your password</h1>
-            <p className="login-hint">Enter your username or the email on your account. We&rsquo;ll email you a code.</p>
+            <p className="login-hint">Enter the email on your account. We&rsquo;ll send you a code.</p>
             {alerts}
 
             <label className="field">
-              <span className="field-label">Username or email</span>
+              <span className="field-label">Email</span>
               <input
                 className="input"
-                type="text"
+                type="email"
+                inputMode="email"
                 autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"
